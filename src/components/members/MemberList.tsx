@@ -298,7 +298,7 @@ function EditMemberModal({ member, onClose }: { member: Member; onClose: () => v
 
 /* ── Modal de convite ─────────────────────────────── */
 
-const inviteInitial = { error: undefined as string | undefined, success: false, token: undefined as string | undefined, sentViaWhatsapp: false }
+const inviteInitial = { error: undefined as string | undefined, success: false, token: undefined as string | undefined, sentViaWhatsapp: false, sentViaEmail: false }
 
 function InviteModal({ onClose }: { onClose: () => void }) {
   const [state, formAction, isPending] = useActionState(inviteMember, inviteInitial)
@@ -323,8 +323,12 @@ function InviteModal({ onClose }: { onClose: () => void }) {
 
           {/* Código de ativação */}
           <p className="text-sm text-[#6b7280] mb-3">
-            {state.sentViaWhatsapp
-              ? 'O código de ativação foi enviado automaticamente via WhatsApp.'
+            {state.sentViaWhatsapp && state.sentViaEmail
+              ? 'O código foi enviado via WhatsApp e e-mail.'
+              : state.sentViaWhatsapp
+              ? 'O código foi enviado automaticamente via WhatsApp.'
+              : state.sentViaEmail
+              ? 'O código foi enviado para o e-mail do membro.'
               : 'Compartilhe o código abaixo com o membro para ele ativar a conta.'}
           </p>
           <div className="bg-[#f9fafb] border border-[#e5e7eb] rounded-xl p-4 mb-2">

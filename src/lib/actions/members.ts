@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { randomBytes } from 'crypto'
+import { sendInviteEmail } from '@/lib/email'
 
 async function getWorkspaceMember() {
   const supabase = await createClient()
@@ -13,7 +14,7 @@ async function getWorkspaceMember() {
   const admin = createAdminClient()
   const { data: member } = await admin
     .from('members')
-    .select('id, workspace_id, role')
+    .select('id, name, workspace_id, role')
     .eq('user_id', user.id)
     .eq('status', 'active')
     .limit(1)
@@ -108,7 +109,7 @@ async function sendWhatsAppInvite(phone: string, name: string, code: string): Pr
 export async function inviteMember(
   _: unknown,
   formData: FormData
-): Promise<{ error?: string; success?: boolean; token?: string; sentViaWhatsapp?: boolean }> {
+): Promise<{ error?: string; success?: boolean; token?: string; sentViaWhatsapp?: boolean; sentViaEmail?: boolean }> {
   const me = await getWorkspaceMember()
   if (!me || me.role !== 'admin') return { error: 'Sem permissão' }
 
@@ -168,6 +169,13 @@ export async function inviteMember(
     expires_at: expires,
   })
 
+  // Busca nome do workspace para personalizar o email
+  const { data: workspace } = await admin
+    .from('workspaces')
+    .select('name')
+    .eq('id', me.workspace_id)
+    .single()
+
   // Envia o código automaticamente via WhatsApp se o número foi informado
   let sentViaWhatsapp = false
   if (whatsapp) {
@@ -179,8 +187,23 @@ export async function inviteMember(
     }
   }
 
-  // TODO: enviar por e-mail se email informado
+  // Envia por e-mail se email informado
+  let sentViaEmail = false
+  if (email) {
+    try {
+      await sendInviteEmail({
+        to: email,
+        name,
+        code,
+        workspaceName: workspace?.name,
+        inviterName: me.name,
+      })
+      sentViaEmail = true
+    } catch (err) {
+      console.error('[inviteMember] erro ao enviar e-mail:', err)
+    }
+  }
 
   revalidatePath('/members')
-  return { success: true, token: code, sentViaWhatsapp }
+  return { success: true, token: code, sentViaWhatsapp, sentViaEmail }
 }
