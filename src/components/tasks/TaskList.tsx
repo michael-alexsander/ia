@@ -95,7 +95,7 @@ function buildFilterParts(
   return parts
 }
 
-function generateAndDownloadPDF(tasks: Task[], filterParts: string[]): string {
+function generateAndDownloadPDF(tasks: Task[], filterParts: string[]): { filename: string; base64: string } {
   const doc = new jsPDF()
 
   // Header band
