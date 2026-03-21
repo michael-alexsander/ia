@@ -154,8 +154,9 @@ function generateAndDownloadPDF(tasks: Task[], filterParts: string[]): string {
   }
 
   const filename = `relatorio-tarefas-${new Date().toISOString().split('T')[0]}.pdf`
+  const base64 = doc.output('datauristring').split(',')[1]
   doc.save(filename)
-  return filename
+  return { filename, base64 }
 }
 
 /* ── TaskList ────────────────────────────────────────── */
@@ -172,7 +173,7 @@ export function TaskList({ initialTasks, members, groups }: {
   const [dateTo,        setDateTo]        = useState('')
   const [editingTask,   setEditingTask]   = useState<Task | null>(null)
   const [showCreate,    setShowCreate]    = useState(false)
-  const [reportFile,    setReportFile]    = useState<string | null>(null)
+  const [reportFile,    setReportFile]    = useState<{ filename: string; base64: string } | null>(null)
   const [isPending, startTransition] = useTransition()
 
   const hasDateFilter = dateFrom || dateTo
@@ -201,8 +202,8 @@ export function TaskList({ initialTasks, members, groups }: {
 
   function handleGenerateReport() {
     const filterParts = buildFilterParts(search, statusFilter, groupFilter, groups, dateFrom, dateTo)
-    const filename = generateAndDownloadPDF(filtered, filterParts)
-    setReportFile(filename)
+    const result = generateAndDownloadPDF(filtered, filterParts)
+    setReportFile(result)
   }
 
   return (
@@ -374,7 +375,8 @@ export function TaskList({ initialTasks, members, groups }: {
 
       {reportFile && (
         <ReportModal
-          filename={reportFile}
+          filename={reportFile.filename}
+          pdfBase64={reportFile.base64}
           members={members}
           onClose={() => setReportFile(null)}
         />
@@ -396,15 +398,16 @@ export function TaskList({ initialTasks, members, groups }: {
 
 /* ── ReportModal ─────────────────────────────────────── */
 
-function ReportModal({ filename, members, onClose }: {
+function ReportModal({ filename, pdfBase64, members, onClose }: {
   filename: string
+  pdfBase64: string
   members: Member[]
   onClose: () => void
 }) {
   const [channel,     setChannel]     = useState<'whatsapp' | 'email' | 'both'>('whatsapp')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [isPending,   startTransition] = useTransition()
-  const [result,      setResult]      = useState<{ error?: string; success?: boolean } | null>(null)
+  const [result,      setResult]      = useState<{ error?: string; success?: boolean; sent?: number } | null>(null)
 
   function toggleMember(id: string) {
     setSelectedIds(prev => {
@@ -425,6 +428,7 @@ function ReportModal({ filename, members, onClose }: {
         memberIds: Array.from(selectedIds),
         channel,
         filename,
+        pdfBase64,
       })
       setResult(res)
     })
@@ -527,7 +531,7 @@ function ReportModal({ filename, members, onClose }: {
         )}
         {result?.success && (
           <p className="text-xs text-green-600 bg-green-50 border border-green-200 rounded-lg px-3 py-2 mb-3">
-            Relatório enviado com sucesso!
+            Relatório enviado para {result.sent} destinatário{result.sent !== 1 ? 's' : ''}!
           </p>
         )}
 
