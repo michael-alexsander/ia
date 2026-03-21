@@ -1,9 +1,9 @@
 # PRD — Gestor de Tarefas e Equipes AI
 **Produto:** MelhorAgencia.ai
 **Agente:** Gestor de Tarefas e Equipes
-**Versão:** 1.2
-**Data:** 2026-03-18
-**Status:** Em definição
+**Versão:** 1.3
+**Data:** 2026-03-21
+**Status:** Em desenvolvimento (MVP parcialmente implementado)
 
 ---
 
@@ -70,7 +70,7 @@ Autenticação: **Google OAuth** (um clique, sem senha) · **Email + Senha** · 
 #### Membros (`/members`)
 - Lista de todos os membros da empresa com nome, função, e nível de acesso
 - CRUD completo: criar, editar, remover membro
-- Convidar novo membro via **e-mail** ou **número de WhatsApp**
+- Convidar novo membro via **número de WhatsApp** (envia código de 6 chars automaticamente) ou **e-mail** (a implementar)
 - Definir se o membro é **Admin** ou **Colaborador**
 
 #### Grupos (`/groups`)
@@ -207,13 +207,14 @@ Todos os dias às 08h
   • Pedro: T09C1 Planilha de custos (venceu ontem)"
 ```
 
-### Fluxo 5 — Convidar Membro (Interface Web)
+### Fluxo 5 — Onboarding de Membro via WhatsApp (implementado)
 ```
 Admin em /members → "Convidar membro"
-  → Preenche nome + email OU número de WhatsApp
-  → Sistema envia convite com link de acesso
-  → Novo membro faz login via Google OAuth
-  → Membro é adicionado ao workspace da empresa
+  → Preenche nome + número de WhatsApp real (+5531XXXXXXXXX)
+  → Sistema gera código de 6 chars (ex: AB12CD), armazena em `invites` com expires_at de 7 dias
+  → Sistema envia o código automaticamente via WhatsApp para o número informado
+  → Membro envia o código para o bot TarefaApp no privado
+  → Bot identifica o invite, grava whatsapp_jid do membro, ativa status para 'active'
 ```
 
 ---
@@ -230,6 +231,7 @@ Admin em /members → "Convidar membro"
 8. Cada empresa é um **workspace isolado** — nenhum dado vaza entre clientes.
 9. Um Admin pode promover outros membros a Admin via interface web ou WhatsApp.
 10. O ID da tarefa é único dentro do workspace da empresa.
+11. O campo `whatsapp` armazena o número real (+5531XXXXXXXXX) — visível no app web para humanos. O campo `whatsapp_jid` armazena o identificador interno retornado pela Evolution API (LID), usado pelo agente para identificar remetentes. Essa separação é necessária porque o WhatsApp usa LIDs (Linked Identifiers) em versões novas que não correspondem ao número real.
 
 ---
 
@@ -253,11 +255,12 @@ O agente mantém em Supabase:
 | Tabela | Descrição |
 |---|---|
 | `workspaces` | Dados da empresa (nome, plano, configurações) |
-| `members` | Nome, telefone, email, função e nível de acesso |
+| `members` | Nome, telefone, email, função, nível de acesso, whatsapp_jid |
 | `groups` | Grupos da empresa e membros associados |
 | `tasks` | Tarefas com ID, status, responsável, prazo, histórico |
 | `agent_config` | Horários de relatório, canais preferidos, alertas configurados |
 | `conversation_context` | Contexto recente para resolução de ambiguidades |
+| `invites` | Convites pendentes com código de 6 chars e prazo de expiração |
 
 A memória é **compartilhada com outros agentes** da MelhorAgencia.ai.
 
@@ -291,12 +294,13 @@ A memória é **compartilhada com outros agentes** da MelhorAgencia.ai.
 |---|---|
 | Interface web | Next.js + Tailwind CSS |
 | Autenticação | Google OAuth (via Supabase Auth) |
-| Interface de conversa | WhatsApp via Evolution API |
-| Lógica do agente | TypeScript / Node.js |
-| LLM | OpenAI API (`gpt-4.1-mini`) |
+| Interface de conversa | WhatsApp via Evolution API 2.3.6 |
+| Lógica do agente | TypeScript / Node.js 20 + tsx + Express |
+| LLM | OpenAI API (`gpt-4o-mini`) |
 | Banco de dados | Supabase (PostgreSQL + pgvector) |
 | Pagamentos | Celcoin API |
-| Hospedagem do agente | VPS Hostinger |
+| Hospedagem do agente | VPS Digital Ocean (198.211.112.153) |
+| Gerenciador de processos | PM2 |
 | Frontend / webhooks | Vercel |
 | IDE | Cursor |
 | Engenheiro chefe | Claude Code (não confundir com o LLM do produto) |
@@ -323,18 +327,21 @@ A interface web segue a identidade do **TarefaApp**, mantendo logotipo e paleta 
 
 ## 15. Próximos Passos
 
-- [ ] Validar PRD v1.1 com Michael
-- [ ] Documento de Arquitetura Técnica
-- [ ] Schema do banco de dados (Supabase)
-- [ ] Configurar ambiente (Evolution API no VPS Hostinger)
-- [ ] Desenvolver autenticação Google OAuth
-- [ ] Desenvolver interface web minimalista (Next.js)
-- [ ] Desenvolver webhook de entrada (recebe mensagem do WhatsApp)
-- [ ] Desenvolver parser de linguagem natural (criar tarefa)
-- [ ] Desenvolver CRUD completo de tarefas
+- [x] Validar PRD v1.1 com Michael
+- [x] Documento de Arquitetura Técnica
+- [x] Schema do banco de dados (Supabase)
+- [x] Configurar ambiente (Evolution API no VPS Digital Ocean)
+- [x] Desenvolver autenticação Google OAuth
+- [x] Desenvolver interface web minimalista (Next.js)
+- [x] Desenvolver webhook de entrada (recebe mensagem do WhatsApp)
+- [x] Desenvolver parser de linguagem natural (criar tarefa)
+- [x] Desenvolver CRUD completo de tarefas
+- [x] Fluxo de onboarding de membros via WhatsApp (código de convite)
 - [ ] Desenvolver sistema de notificações e lembretes
 - [ ] Desenvolver relatórios automáticos (cron jobs)
 - [ ] Desenvolver geração de PDF e envio por WhatsApp/email
+- [ ] Convidar membro via e-mail (atualmente apenas WhatsApp)
 - [ ] Integrar Celcoin API (planos e assinaturas)
+- [ ] Deploy em produção (domínio final)
 - [ ] Testes internos com o time da MelhorAgencia.ai
 - [ ] Abertura para Early Adopters

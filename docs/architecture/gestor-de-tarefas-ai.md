@@ -1,7 +1,7 @@
 # Arquitetura Técnica — Gestor de Tarefas e Equipes AI
 **Produto:** MelhorAgencia.ai
-**Versão:** 1.0
-**Data:** 2026-03-18
+**Versão:** 1.1
+**Data:** 2026-03-21
 
 ---
 
@@ -15,18 +15,20 @@
                          │ mensagem
                          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                   VPS HOSTINGER                                 │
+│              VPS DIGITAL OCEAN (198.211.112.153)                │
 │                                                                 │
 │  ┌─────────────────┐      ┌──────────────────────────────────┐  │
 │  │  Evolution API  │─────▶│        Agent Server              │  │
-│  │  (WhatsApp)     │◀─────│  (Node.js / TypeScript)          │  │
-│  └─────────────────┘      │                                  │  │
+│  │  v2.3.6 :8080   │◀─────│  Node.js 20 + TypeScript         │  │
+│  │  inst: tarefaapp│      │  Express :3001                   │  │
+│  └─────────────────┘      │  PM2: tarefaapp-agent            │  │
+│                           │                                  │  │
 │                           │  • Webhook receiver              │  │
 │                           │  • Message router                │  │
 │                           │  • NLP parser (OpenAI)           │  │
 │                           │  • Business logic                │  │
 │                           │  • Notification dispatcher       │  │
-│                           │  • Cron scheduler                │  │
+│                           │  • Cron scheduler (a implementar)│  │
 │                           └──────────────┬───────────────────┘  │
 │                                          │                      │
 │                           ┌──────────────▼───────────────────┐  │
@@ -53,6 +55,9 @@
 
 ## 2. Schema do Banco de Dados (Supabase)
 
+**Estado atual:** 9 tabelas + coluna `whatsapp_jid` adicionada à tabela `members` (migration 004).
+**Workspace de produção:** `931eb2a6-ca77-4466-9a74-2135f8882130`
+
 ### 2.1 `workspaces` — empresas clientes
 ```sql
 id            uuid PRIMARY KEY DEFAULT gen_random_uuid()
@@ -73,7 +78,8 @@ workspace_id    uuid REFERENCES workspaces(id) ON DELETE CASCADE
 user_id         uuid REFERENCES auth.users(id) ON DELETE CASCADE
 name            text NOT NULL
 email           text
-whatsapp        text                        -- número com DDI, ex: 5511999999999
+whatsapp        text                        -- número real com DDI, ex: +5531XXXXXXXXX (visível no app web)
+whatsapp_jid    text                        -- JID/LID interno da Evolution API (usado pelo agent)
 role            text NOT NULL DEFAULT 'member' CHECK (role IN ('admin', 'member'))
 status          text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'invited'))
 created_at      timestamptz DEFAULT now()
@@ -82,6 +88,8 @@ updated_at      timestamptz DEFAULT now()
 UNIQUE (workspace_id, user_id)
 UNIQUE (workspace_id, whatsapp)
 ```
+
+> **Decisão de arquitetura — whatsapp vs whatsapp_jid:** O campo `whatsapp` armazena o número real (+5531XXXXXXXXX) que o admin informa ao convidar um membro — é o que aparece na interface web para humanos. O campo `whatsapp_jid` armazena o identificador retornado pela Evolution API no momento em que o membro completa o onboarding via WhatsApp. Essa separação é necessária porque o WhatsApp usa LIDs (Linked Identifiers) em versões novas que não correspondem ao número real. O agent server usa `whatsapp_jid` para identificar remetentes de mensagens. Migration aplicada: `004_add_whatsapp_jid.sql`.
 
 ### 2.3 `groups` — grupos do workspace
 ```sql
@@ -123,6 +131,8 @@ created_at      timestamptz DEFAULT now()
 updated_at      timestamptz DEFAULT now()
 ```
 
+> **Nota sobre datas:** Todas as formatações de `due_date` usam `.split('T')[0] + 'T12:00:00'` para evitar problemas de fuso UTC que causavam exibição do dia anterior na interface.
+
 ### 2.6 `task_history` — auditoria de mudanças
 ```sql
 id          uuid PRIMARY KEY DEFAULT gen_random_uuid()
@@ -158,12 +168,14 @@ id              uuid PRIMARY KEY DEFAULT gen_random_uuid()
 workspace_id    uuid REFERENCES workspaces(id) ON DELETE CASCADE
 email           text
 whatsapp        text
-token           text UNIQUE NOT NULL
+token           text UNIQUE NOT NULL       -- código de 6 chars alfanumérico (ex: AB12CD)
 role            text DEFAULT 'member' CHECK (role IN ('admin', 'member'))
 accepted        boolean DEFAULT false
 expires_at      timestamptz DEFAULT now() + interval '7 days'
 created_at      timestamptz DEFAULT now()
 ```
+
+> O campo `token` é um código de 6 caracteres alfanumérico (ex: `AB12CD`) enviado via WhatsApp ao número informado pelo admin. O membro envia esse código para o bot para concluir o onboarding. Ao aceitar, o sistema grava o `whatsapp_jid` real no campo correspondente em `members` e ativa o `status` para `'active'`.
 
 ### 2.9 `conversation_context` — memória de conversa
 ```sql
@@ -211,26 +223,26 @@ async function createUniqueTaskId(workspaceId: string): Promise<string> {
 
 ```
 1. Usuário envia mensagem no WhatsApp
-2. Evolution API dispara POST para: https://[vps-hostinger]/webhook/whatsapp
+2. Evolution API dispara POST para: http://localhost:3001/webhook (evento: MESSAGES_UPSERT)
 3. Webhook receiver valida o payload e extrai:
-   - Número do remetente
+   - JID do remetente (remoteJid ou sender — pode ser LID em versões novas)
    - Texto da mensagem
    - ID do grupo (se for mensagem de grupo)
    - Menção ao bot (se grupo)
 4. Message router identifica:
-   - Qual workspace pertence esse número
-   - Qual membro é esse número
+   - Qual workspace pertence esse JID (busca por whatsapp_jid em members)
+   - Qual membro é esse JID
    - Se é grupo ou privado
    - Se o bot foi mencionado (grupo) ou mensagem direta (privado)
-5. NLP Parser processa a mensagem (OpenAI gpt-4.1-mini)
+5. NLP Parser processa a mensagem (OpenAI gpt-4o-mini)
 6. Business logic executa a ação
 7. Resposta enviada via Evolution API
 ```
 
-### 4.1 Payload do Webhook (Evolution API)
+### 4.1 Payload do Webhook (Evolution API v2.3.6)
 ```json
 {
-  "event": "messages.upsert",
+  "event": "MESSAGES_UPSERT",
   "data": {
     "key": {
       "remoteJid": "5511999999999@s.whatsapp.net",
@@ -245,11 +257,21 @@ async function createUniqueTaskId(workspaceId: string): Promise<string> {
 }
 ```
 
+> **Atenção:** Em versões novas do WhatsApp com LID ativo, o `remoteJid` pode retornar um identificador do formato `XXXXXXXXXX@lid` em vez do número real. O campo `whatsapp_jid` em `members` armazena exatamente esse valor para comparação.
+
 ---
 
 ## 5. NLP Parser — Processamento de Linguagem Natural
 
-O parser usa o `gpt-4.1-mini` para extrair intenção e entidades das mensagens.
+O parser usa o `gpt-4o-mini` para extrair intenção e entidades das mensagens.
+
+**Intents implementados:**
+- `criar_tarefa`
+- `listar_tarefas`
+- `concluir_tarefa`
+- `atualizar_tarefa`
+- `ajuda`
+- `desconhecido`
 
 ### 5.1 Estrutura do prompt do sistema
 ```
@@ -259,7 +281,7 @@ Data e hora atual: {datetime}
 
 Responda sempre em JSON com o seguinte schema:
 {
-  "intent": "create_task | update_task | complete_task | delete_task | list_tasks | report | unknown",
+  "intent": "criar_tarefa | listar_tarefas | concluir_tarefa | atualizar_tarefa | ajuda | desconhecido",
   "entities": {
     "task_id": string | null,
     "title": string | null,
@@ -277,7 +299,7 @@ Responda sempre em JSON com o seguinte schema:
 
 ### 5.2 Fluxo de criação de tarefa
 ```
-mensagem → parser → intent: "create_task"
+mensagem → parser → intent: "criar_tarefa"
   ↓
 missing: [] → confirmar e criar
 missing: ["assignee"] → perguntar "Para quem é a tarefa?"
@@ -292,47 +314,94 @@ confirmar → "Confirma? [título] | [responsável] | [prazo]"
 
 ---
 
-## 6. Estrutura do Agent Server (VPS Hostinger)
+## 6. Agent Server (VPS Digital Ocean — implementado)
 
+**Localização no servidor:** `/opt/tarefaapp/`
+**Processo PM2:** `tarefaapp-agent`
+**Porta:** `3001`
+**Stack:** Node.js 20 + TypeScript + tsx + Express
+
+### 6.1 Estrutura de arquivos atual
 ```
-agent-server/
+/opt/tarefaapp/
 ├── src/
-│   ├── index.ts                  # entry point, inicia o servidor HTTP
-│   ├── webhook/
-│   │   └── whatsapp.ts           # recebe e valida payload da Evolution API
-│   ├── router/
-│   │   └── message-router.ts     # identifica workspace, membro, contexto
-│   ├── parser/
-│   │   └── nlp-parser.ts         # chamada ao OpenAI, extração de intenção
-│   ├── handlers/
-│   │   ├── create-task.ts
-│   │   ├── update-task.ts
-│   │   ├── complete-task.ts
-│   │   ├── delete-task.ts
-│   │   ├── list-tasks.ts
-│   │   └── report.ts
-│   ├── notifications/
-│   │   └── dispatcher.ts         # envia mensagens via Evolution API
-│   ├── scheduler/
-│   │   └── cron.ts               # cron jobs para relatórios e lembretes
-│   ├── services/
-│   │   ├── supabase.ts           # cliente Supabase
-│   │   ├── openai.ts             # cliente OpenAI
-│   │   └── evolution.ts          # cliente Evolution API
-│   └── utils/
-│       ├── task-id.ts            # geração de ID alfanumérico
-│       ├── date-parser.ts        # normalização de datas em pt-BR
-│       └── formatter.ts          # formata mensagens WhatsApp
+│   ├── index.ts          # entry point, inicia Express na porta 3001
+│   ├── webhook.ts        # recebe e valida payload da Evolution API (MESSAGES_UPSERT)
+│   ├── parser.ts         # chamada ao OpenAI gpt-4o-mini, extração de intenção/entidades
+│   ├── evolution.ts      # cliente Evolution API (envio de mensagens)
+│   ├── supabase.ts       # cliente Supabase (service role)
+│   ├── types.ts          # tipos TypeScript compartilhados
+│   └── handlers/
+│       ├── index.ts      # roteamento de intents para handlers
+│       └── tasks.ts      # handlers: criar_tarefa, listar_tarefas, concluir_tarefa, atualizar_tarefa
 ├── .env
 ├── package.json
 └── tsconfig.json
 ```
 
+### 6.2 Estrutura planejada (expansão futura)
+```
+src/
+├── router/
+│   └── message-router.ts     # identifica workspace, membro, contexto
+├── notifications/
+│   └── dispatcher.ts         # envia mensagens via Evolution API
+├── scheduler/
+│   └── cron.ts               # cron jobs para relatórios e lembretes
+└── utils/
+    ├── task-id.ts            # geração de ID alfanumérico
+    ├── date-parser.ts        # normalização de datas em pt-BR
+    └── formatter.ts          # formata mensagens WhatsApp
+```
+
 ---
 
-## 7. Cron Jobs — Relatórios e Lembretes
+## 7. Evolution API (implementado)
 
-Todos os cron jobs rodam no Agent Server via `node-cron`.
+| Propriedade | Valor |
+|---|---|
+| Versão | 2.3.6 |
+| Porta | 8080 |
+| Instância | `tarefaapp` |
+| Número WhatsApp | +55 31 8950-7577 |
+| Gerenciador | PM2 (mesmo VPS) |
+| Webhook URL | `http://localhost:3001/webhook` |
+| Evento configurado | `MESSAGES_UPSERT` |
+
+O bot responde a:
+- **DMs diretos** — qualquer mensagem enviada ao número do bot
+- **Menções @ em grupos** — mensagens que mencionam o bot em grupos configurados
+
+---
+
+## 8. Fluxo de Onboarding de Membros via WhatsApp (implementado)
+
+```
+1. Admin em /members → "Convidar membro"
+   → Preenche nome + número real (+5531XXXXXXXXX)
+
+2. Sistema gera código de 6 chars (ex: AB12CD)
+   → Armazena em tabela `invites` com expires_at = now() + 7 days
+   → Envia o código via WhatsApp para o número informado
+
+3. Membro recebe: "Seu código de acesso ao TarefaApp: AB12CD
+   Envie este código para este número para ativar sua conta."
+
+4. Membro envia o código para o bot TarefaApp
+
+5. Bot:
+   → Busca invite válido pelo token (não expirado, não aceito)
+   → Grava whatsapp_jid real do remetente no campo members.whatsapp_jid
+   → Atualiza members.status para 'active'
+   → Marca invite como aceito
+   → Responde: "Conta ativada! Você já pode criar e gerenciar tarefas."
+```
+
+---
+
+## 9. Cron Jobs — Relatórios e Lembretes (a implementar)
+
+Todos os cron jobs rodarão no Agent Server via `node-cron`.
 
 | Job | Expressão cron | Ação |
 |---|---|---|
@@ -346,11 +415,11 @@ Todos os cron jobs rodam no Agent Server via `node-cron`.
 | Alerta de atraso | `0 9 * * *` | Verifica tarefas vencidas ontem |
 | Tarefas recorrentes | `0 0 * * *` | Cria novas ocorrências de tarefas recorrentes |
 
-> Todos os cron jobs respeitam as configurações por workspace definidas em `agent_config`.
+> Todos os cron jobs respeitarão as configurações por workspace definidas em `agent_config`.
 
 ---
 
-## 8. Estrutura do Frontend (Vercel / Next.js)
+## 10. Estrutura do Frontend (Vercel / Next.js)
 
 ```
 web/
@@ -360,7 +429,7 @@ web/
 │   ├── (dashboard)/
 │   │   ├── layout.tsx            # sidebar + header
 │   │   ├── tasks/page.tsx        # lista de tarefas com filtros
-│   │   ├── members/page.tsx      # CRUD de membros + convites
+│   │   ├── members/page.tsx      # CRUD de membros + convites via WhatsApp
 │   │   ├── groups/page.tsx       # CRUD de grupos
 │   │   └── settings/page.tsx     # configurações do workspace
 │   └── api/
@@ -389,17 +458,17 @@ web/
 
 ---
 
-## 9. Variáveis de Ambiente
+## 11. Variáveis de Ambiente
 
-### Agent Server (VPS Hostinger — `.env`)
+### Agent Server (VPS Digital Ocean — `.env`)
 ```env
 PORT=3001
 SUPABASE_URL=
 SUPABASE_SERVICE_ROLE_KEY=
 OPENAI_API_KEY=
-EVOLUTION_API_URL=
+EVOLUTION_API_URL=http://localhost:8080
 EVOLUTION_API_KEY=
-EVOLUTION_INSTANCE=
+EVOLUTION_INSTANCE=tarefaapp
 WEBHOOK_SECRET=
 ```
 
@@ -415,7 +484,7 @@ REPORT_WEBHOOK_SECRET=
 
 ---
 
-## 10. Limites por Plano (enforcement no backend)
+## 12. Limites por Plano (enforcement no backend)
 
 ```typescript
 const PLAN_LIMITS = {
@@ -435,7 +504,7 @@ async function checkPlanLimit(workspaceId: string, resource: 'groups' | 'members
 
 ---
 
-## 11. Segurança e Isolamento Multi-tenant
+## 13. Segurança e Isolamento Multi-tenant
 
 - Todas as tabelas têm `workspace_id` — nunca uma query sem esse filtro
 - **Row Level Security (RLS)** habilitado no Supabase em todas as tabelas
@@ -445,19 +514,32 @@ async function checkPlanLimit(workspaceId: string, resource: 'groups' | 'members
 
 ---
 
-## 12. Próximos Passos (ordem de execução)
+## 14. Decisões de Arquitetura Registradas
 
-- [ ] Configurar Supabase: criar projeto, rodar migrations, habilitar RLS
-- [ ] Configurar Evolution API no VPS Hostinger
-- [ ] Scaffold do Agent Server (Node.js + TypeScript)
-- [ ] Implementar webhook receiver + message router
-- [ ] Implementar NLP parser (OpenAI)
-- [ ] Implementar handlers de tarefa (CRUD)
-- [ ] Implementar cron jobs
-- [ ] Scaffold do frontend Next.js
-- [ ] Implementar autenticação (Google OAuth + Email + Magic Link)
+| Data | Decisão | Motivo |
+|---|---|---|
+| 2026-03-21 | Separação `whatsapp` / `whatsapp_jid` em `members` | WhatsApp usa LIDs em versões novas que não correspondem ao número real. Número real (+5531...) é para humanos no app web; JID/LID é para o agent identificar remetentes. Migration 004 aplicada. |
+| 2026-03-21 | Convite via código de 6 chars (não link) | Mais simples de digitar no WhatsApp; evita problemas com links em grupos |
+| 2026-03-21 | Due date formatada com `.split('T')[0] + 'T12:00:00'` | Evita bug de UTC que exibia dia anterior na interface web |
+| 2026-03-21 | Evolution API na porta 8080, Agent Server na porta 3001, webhook via localhost | Ambos no mesmo VPS; comunicação interna sem exposição pública do webhook |
+| 2026-03-21 | Migração de VPS Hostinger para VPS Digital Ocean | Ambiente de produção atual: 198.211.112.153 |
+
+---
+
+## 15. Próximos Passos (ordem de execução)
+
+- [x] Configurar Supabase: criar projeto, rodar migrations, habilitar RLS
+- [x] Configurar Evolution API no VPS Digital Ocean
+- [x] Scaffold do Agent Server (Node.js + TypeScript)
+- [x] Implementar webhook receiver + message router
+- [x] Implementar NLP parser (OpenAI gpt-4o-mini)
+- [x] Implementar handlers de tarefa (CRUD básico)
+- [x] Implementar fluxo de onboarding via código de convite WhatsApp
+- [ ] Implementar cron jobs (relatórios automáticos e lembretes de prazo)
+- [ ] Scaffold do frontend Next.js (em andamento)
+- [x] Implementar autenticação (Google OAuth + Email + Magic Link)
 - [ ] Implementar páginas: Tasks, Members, Groups, Settings
 - [ ] Implementar geração de PDF
 - [ ] Integrar Celcoin API
-- [ ] Deploy: Agent Server no Hostinger, Frontend na Vercel
+- [ ] Deploy em produção (domínio final)
 - [ ] Testes internos com o time
