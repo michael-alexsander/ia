@@ -302,8 +302,9 @@ const inviteInitial = { error: undefined as string | undefined, success: false, 
 
 function InviteModal({ onClose }: { onClose: () => void }) {
   const [state, formAction, isPending] = useActionState(inviteMember, inviteInitial)
-  const [channel, setChannel] = useState<'email' | 'whatsapp' | 'both'>('email')
-  const [copied, setCopied]   = useState(false)
+  const [channel,    setChannel]    = useState<'email' | 'whatsapp' | 'both'>('email')
+  const [copied,     setCopied]     = useState(false)
+  const [wppNumber,  setWppNumber]  = useState('')
 
   function copyCode() {
     if (!state?.token) return
@@ -403,10 +404,20 @@ function InviteModal({ onClose }: { onClose: () => void }) {
           {(channel === 'whatsapp' || channel === 'both') && (
             <div>
               <label className="block text-sm font-medium mb-1">WhatsApp</label>
-              <input type="tel" name="whatsapp" placeholder="5511999999999 (com DDI)"
-                required={channel === 'whatsapp'}
-                className="w-full border border-[#e5e7eb] rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#128c7e] transition-colors"
-              />
+              <div className="flex rounded-lg border border-[#e5e7eb] overflow-hidden focus-within:border-[#128c7e] transition-colors">
+                <div className="flex items-center gap-1.5 px-3 bg-[#f9fafb] border-r border-[#e5e7eb] text-sm text-[#374151] shrink-0 select-none">
+                  🇧🇷 +55
+                </div>
+                <input
+                  type="tel"
+                  placeholder="(11) 99999-9999"
+                  required={channel === 'whatsapp'}
+                  value={wppNumber}
+                  onChange={e => setWppNumber(e.target.value)}
+                  className="flex-1 px-3 py-2.5 text-sm outline-none bg-white"
+                />
+              </div>
+              <input type="hidden" name="whatsapp" value={`55${wppNumber.replace(/\D/g, '')}`} />
             </div>
           )}
 

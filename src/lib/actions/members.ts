@@ -66,9 +66,14 @@ export async function removeMember(memberId: string) {
   if (me.id === memberId) return { error: 'Você não pode remover a si mesmo' }
 
   const admin = createAdminClient()
+
+  // Remove referências nas tarefas antes de deletar
+  await admin.from('tasks').update({ assignee_id: null }).eq('assignee_id', memberId)
+  await admin.from('tasks').update({ created_by:  null }).eq('created_by',  memberId)
+
   const { error } = await admin
     .from('members')
-    .update({ status: 'inactive' })
+    .delete()
     .eq('id', memberId)
     .eq('workspace_id', me.workspace_id)
 
