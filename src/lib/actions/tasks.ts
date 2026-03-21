@@ -40,7 +40,7 @@ export async function getTasks() {
   const { data } = await admin
     .from('tasks')
     .select(`
-      id, task_id, title, description, status, due_date, recurrence, created_at,
+      id, task_id, title, description, status, due_date, due_time, recurrence, created_at,
       assignee:members!tasks_assignee_id_fkey(id, name),
       group:groups(id, name)
     `)
@@ -91,6 +91,7 @@ export async function createTask(formData: FormData) {
   const assignee_id = (formData.get('assignee_id') as string) || null
   const group_id    = (formData.get('group_id') as string) || null
   const due_date    = (formData.get('due_date') as string) || null
+  const due_time    = (formData.get('due_time') as string) || null
   const description = (formData.get('description') as string) || null
 
   if (!title?.trim()) return { error: 'Título obrigatório' }
@@ -119,6 +120,7 @@ export async function createTask(formData: FormData) {
     group_id: group_id || null,
     created_by: member.id,
     due_date: due_date || null,
+    due_time: due_time || null,
     status: 'open',
   })
 
@@ -153,6 +155,7 @@ export async function updateTask(taskId: string, formData: FormData) {
   const assignee_id = (formData.get('assignee_id') as string) || null
   const group_id    = (formData.get('group_id') as string) || null
   const due_date    = (formData.get('due_date') as string) || null
+  const due_time    = (formData.get('due_time') as string) || null
   const description = (formData.get('description') as string)?.trim() || null
   const status      = (formData.get('status') as string) || undefined
 
@@ -161,7 +164,7 @@ export async function updateTask(taskId: string, formData: FormData) {
   const admin = createAdminClient()
   const { error } = await admin
     .from('tasks')
-    .update({ title, assignee_id, group_id, due_date, description, ...(status ? { status } : {}) })
+    .update({ title, assignee_id, group_id, due_date, due_time, description, ...(status ? { status } : {}) })
     .eq('id', taskId)
     .eq('workspace_id', member.workspace_id)
 

@@ -15,6 +15,7 @@ type Task = {
   description: string | null
   status: TaskStatus
   due_date: string | null
+  due_time: string | null
   assignee: { id: string; name: string } | null
   group: { id: string; name: string } | null
 }
@@ -323,7 +324,10 @@ export function TaskList({ initialTasks, members, groups }: {
                   <td className="px-4 py-3 text-[#6b7280]">{task.assignee?.name ?? '—'}</td>
                   <td className="px-4 py-3 text-[#6b7280]">{task.group?.name ?? '—'}</td>
                   <td className="px-4 py-3 text-[#6b7280]">
-                    {task.due_date ? new Date(task.due_date.split('T')[0] + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}
+                    {task.due_date
+                      ? new Date(task.due_date.split('T')[0] + 'T12:00:00').toLocaleDateString('pt-BR') +
+                        (task.due_time ? ` às ${task.due_time.slice(0,5)}` : '')
+                      : '—'}
                   </td>
                   <td className="px-4 py-3">
                     <select
@@ -624,10 +628,17 @@ function TaskModal({ task, members, groups, onClose }: {
 
           <div>
             <label className="block text-sm font-medium mb-1">Prazo</label>
-            <input type="date" name="due_date"
-              defaultValue={task?.due_date ? task.due_date.split('T')[0] : ''}
-              className="w-full border border-[#e5e7eb] rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#128c7e]"
-            />
+            <div className="flex gap-2">
+              <input type="date" name="due_date"
+                defaultValue={task?.due_date ? task.due_date.split('T')[0] : ''}
+                className="flex-1 border border-[#e5e7eb] rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#128c7e]"
+              />
+              <input type="time" name="due_time"
+                defaultValue={task?.due_time ? task.due_time.slice(0,5) : ''}
+                className="w-28 border border-[#e5e7eb] rounded-lg px-3 py-2.5 text-sm outline-none focus:border-[#128c7e]"
+              />
+            </div>
+            <p className="text-xs text-[#6b7280] mt-1">Horário opcional — necessário para lembretes de prazo</p>
           </div>
 
           <div>

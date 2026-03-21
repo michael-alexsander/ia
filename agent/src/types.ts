@@ -16,9 +16,11 @@ export interface ParsedIntent {
     task_id?: string       // ID de 5 chars, ex: AB123
     status_filtro?: 'open' | 'in_progress' | 'done' | 'all'
     novo_status?: 'open' | 'in_progress' | 'done'
+    hora?: string             // HH:MM — horário da tarefa
     novo_titulo?: string
     novo_prazo?: string
     novo_responsavel?: string
+    nova_hora?: string        // HH:MM — novo horário ao atualizar
   }
   confidence: number
 }

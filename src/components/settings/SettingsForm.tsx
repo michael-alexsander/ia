@@ -11,9 +11,7 @@ type Settings = {
   report_channel: string
   report_morning_time: string
   report_evening_time: string
-  reminder_1day: boolean
-  reminder_1hour: boolean
-  reminder_same_day: boolean
+  reminder_hours_before: number
   alert_overdue_next_day: boolean
 }
 
@@ -84,9 +82,7 @@ export function SettingsForm({ initialSettings }: { initialSettings: Settings | 
     report_channel: 'whatsapp',
     report_morning_time: '08:00',
     report_evening_time: '18:00',
-    reminder_1day: true,
-    reminder_1hour: false,
-    reminder_same_day: true,
+    reminder_hours_before: 2,
     alert_overdue_next_day: true,
   })
 
@@ -176,12 +172,26 @@ export function SettingsForm({ initialSettings }: { initialSettings: Settings | 
 
       {/* Lembretes */}
       <Section icon={Clock} title="Lembretes de prazo">
-        <Toggle name="reminder_1day"     checked={cfg.reminder_1day}     onChange={v => set('reminder_1day', v)}
-          label="1 dia antes do vencimento"  description="Avisa o responsável e o admin na véspera" />
-        <Toggle name="reminder_1hour"    checked={cfg.reminder_1hour}    onChange={v => set('reminder_1hour', v)}
-          label="1 hora antes do vencimento" description="Aviso de última hora para tarefas urgentes" />
-        <Toggle name="reminder_same_day" checked={cfg.reminder_same_day} onChange={v => set('reminder_same_day', v)}
-          label="No dia do vencimento"       description="Aviso logo pela manhã no dia que vence" />
+        <div className="py-3">
+          <p className="text-sm font-medium mb-0.5">Lembrar antes do vencimento</p>
+          <p className="text-xs text-[#6b7280] mb-3">
+            O responsável recebe um aviso X horas antes da hora definida na tarefa.
+            Requer que a tarefa tenha horário definido.
+          </p>
+          <div className="flex items-center gap-3">
+            <input
+              type="number"
+              name="reminder_hours_before"
+              min={1} max={72}
+              value={cfg.reminder_hours_before}
+              onChange={e => set('reminder_hours_before', parseInt(e.target.value) || 2)}
+              className="w-20 border border-[#e5e7eb] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#128c7e] transition-colors text-center"
+            />
+            <span className="text-sm text-[#6b7280]">
+              hora{cfg.reminder_hours_before !== 1 ? 's' : ''} antes do vencimento
+            </span>
+          </div>
+        </div>
       </Section>
 
       {/* Alertas */}

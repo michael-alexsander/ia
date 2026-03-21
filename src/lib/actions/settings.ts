@@ -40,16 +40,14 @@ export async function saveSettings(formData: FormData): Promise<{ error?: string
   if (!member || member.role !== 'admin') return { error: 'Sem permissão' }
 
   const updates = {
-    report_daily:           formData.get('report_daily') === 'on',
-    report_weekly:          formData.get('report_weekly') === 'on',
-    report_monthly:         formData.get('report_monthly') === 'on',
-    report_channel:         formData.get('report_channel') as string || 'whatsapp',
-    report_morning_time:    formData.get('report_morning_time') as string || '08:00',
-    report_evening_time:    formData.get('report_evening_time') as string || '18:00',
-    reminder_1day:          formData.get('reminder_1day') === 'on',
-    reminder_1hour:         formData.get('reminder_1hour') === 'on',
-    reminder_same_day:      formData.get('reminder_same_day') === 'on',
-    alert_overdue_next_day: formData.get('alert_overdue_next_day') === 'on',
+    report_daily:            formData.get('report_daily') === 'on',
+    report_weekly:           formData.get('report_weekly') === 'on',
+    report_monthly:          formData.get('report_monthly') === 'on',
+    report_channel:          formData.get('report_channel') as string || 'whatsapp',
+    report_morning_time:     formData.get('report_morning_time') as string || '08:00',
+    report_evening_time:     formData.get('report_evening_time') as string || '18:00',
+    reminder_hours_before:   parseInt(formData.get('reminder_hours_before') as string) || 2,
+    alert_overdue_next_day:  formData.get('alert_overdue_next_day') === 'on',
   }
 
   const admin = createAdminClient()

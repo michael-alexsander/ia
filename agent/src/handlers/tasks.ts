@@ -90,6 +90,7 @@ export async function criarTarefa(
     group_id,
     created_by: ctx.memberId,
     due_date: entities.prazo ?? null,
+    due_time: entities.hora ?? null,
     status: 'open',
   })
 
@@ -104,6 +105,7 @@ export async function criarTarefa(
   if (entities.prazo) {
     const dateOnly = entities.prazo.split('T')[0]
     msg += `\n📅 Prazo: ${new Date(dateOnly + 'T12:00:00').toLocaleDateString('pt-BR')}`
+    if (entities.hora) msg += ` às ${entities.hora}`
   }
   return msg
 }
@@ -217,6 +219,7 @@ export async function atualizarTarefa(
 
   if (entities.novo_titulo)     updates.title    = entities.novo_titulo
   if (entities.novo_prazo)      updates.due_date = entities.novo_prazo.split('T')[0]
+  if (entities.nova_hora)       updates.due_time = entities.nova_hora
   if (entities.novo_status)     updates.status   = entities.novo_status
 
   // Atualizar responsável por nome
@@ -249,6 +252,7 @@ export async function atualizarTarefa(
   let msg = `✏️ Tarefa *${task_id}* atualizada!\n`
   if (entities.novo_titulo)     msg += `📋 Novo título: ${entities.novo_titulo}\n`
   if (entities.novo_prazo)      msg += `📅 Novo prazo: ${new Date(entities.novo_prazo.split('T')[0] + 'T12:00:00').toLocaleDateString('pt-BR')}\n`
+  if (entities.nova_hora)       msg += `🕐 Novo horário: ${entities.nova_hora}\n`
   if (entities.novo_status)     msg += `📊 Novo status: ${STATUS_LABEL[entities.novo_status]}\n`
   if (assigneeName)             msg += `👤 Novo responsável: ${assigneeName}\n`
 
