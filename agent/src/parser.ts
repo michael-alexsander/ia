@@ -29,7 +29,9 @@ Formato de resposta (JSON válido):
     "task_id": "ID de 5 chars maiúsculos se mencionado (ex: AB123)",
     "status_filtro": "open|in_progress|done|all (só para listar)",
     "novo_status": "open|in_progress|done (só para atualizar)",
-    "novo_titulo": "novo título se for atualização de título"
+    "novo_titulo": "novo título se for atualização de título",
+    "novo_prazo": "YYYY-MM-DD novo prazo se for atualização de prazo",
+    "novo_responsavel": "nome do novo responsável se for atualização de responsável"
   },
   "confidence": 0.95
 }
@@ -38,7 +40,9 @@ Regras:
 - Inclua apenas as entidades que foram explicitamente mencionadas
 - Interprete datas relativas: "amanhã", "sexta", "semana que vem" → data absoluta
 - Para listar: sem filtro de status = mostrar abertas + em andamento
-- IDs de tarefa são sempre 5 chars alfanuméricos maiúsculos`
+- IDs de tarefa são sempre 5 chars alfanuméricos maiúsculos
+- Para criar_tarefa: "eu", "mim", "para mim" no responsável → use o valor "eu" em responsavel
+- Para atualizar_tarefa: mudanças de responsável vão em novo_responsavel, de prazo em novo_prazo, de título em novo_titulo`
 }
 
 export async function parseMessage(text: string): Promise<ParsedIntent> {

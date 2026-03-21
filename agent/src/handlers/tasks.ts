@@ -35,10 +35,11 @@ export async function criarTarefa(
     return '❌ Preciso do título da tarefa.\nEx: *criar tarefa* Revisar proposta para João até sexta'
   }
 
-  // Busca responsável por nome
-  let assignee_id: string | null = null
-  let assigneeName = ''
-  if (entities.responsavel) {
+  // Busca responsável por nome (ou assume o criador se não informado / "eu")
+  let assignee_id: string = ctx.memberId
+  let assigneeName: string = ctx.memberName
+  const respQuery = entities.responsavel?.toLowerCase()
+  if (respQuery && respQuery !== 'eu' && respQuery !== 'mim') {
     const { data } = await supabase
       .from('members')
       .select('id, name')
@@ -212,20 +213,44 @@ export async function atualizarTarefa(
   if (!task) return `❌ Tarefa *${task_id}* não encontrada.`
 
   const updates: Record<string, unknown> = {}
-  if (entities.novo_titulo) updates.title    = entities.novo_titulo
-  if (entities.novo_prazo)  updates.due_date = entities.novo_prazo.split('T')[0]
-  if (entities.novo_status) updates.status   = entities.novo_status
+  let assigneeName = ''
+
+  if (entities.novo_titulo)     updates.title    = entities.novo_titulo
+  if (entities.novo_prazo)      updates.due_date = entities.novo_prazo.split('T')[0]
+  if (entities.novo_status)     updates.status   = entities.novo_status
+
+  // Atualizar responsável por nome
+  if (entities.novo_responsavel) {
+    const respQuery = entities.novo_responsavel.toLowerCase()
+    if (respQuery === 'eu' || respQuery === 'mim') {
+      updates.assignee_id = ctx.memberId
+      assigneeName = ctx.memberName
+    } else {
+      const { data } = await supabase
+        .from('members')
+        .select('id, name')
+        .eq('workspace_id', ctx.workspaceId)
+        .eq('status', 'active')
+        .ilike('name', `%${entities.novo_responsavel}%`)
+        .limit(1)
+      if (data?.length) {
+        updates.assignee_id = data[0].id
+        assigneeName = data[0].name
+      }
+    }
+  }
 
   if (!Object.keys(updates).length) {
-    return '❌ Informe o que deseja atualizar (título, prazo ou status).'
+    return '❌ Informe o que deseja atualizar.\nEx: *atualizar* AB123 responsável Ana\nEx: *atualizar* AB123 prazo sexta\nEx: *atualizar* AB123 status em andamento'
   }
 
   await supabase.from('tasks').update(updates).eq('id', task.id)
 
   let msg = `✏️ Tarefa *${task_id}* atualizada!\n`
-  if (entities.novo_titulo) msg += `📋 Novo título: ${entities.novo_titulo}\n`
-  if (entities.novo_prazo)  msg += `📅 Novo prazo: ${new Date(entities.novo_prazo.split('T')[0] + 'T12:00:00').toLocaleDateString('pt-BR')}\n`
-  if (entities.novo_status) msg += `📊 Novo status: ${STATUS_LABEL[entities.novo_status]}\n`
+  if (entities.novo_titulo)     msg += `📋 Novo título: ${entities.novo_titulo}\n`
+  if (entities.novo_prazo)      msg += `📅 Novo prazo: ${new Date(entities.novo_prazo.split('T')[0] + 'T12:00:00').toLocaleDateString('pt-BR')}\n`
+  if (entities.novo_status)     msg += `📊 Novo status: ${STATUS_LABEL[entities.novo_status]}\n`
+  if (assigneeName)             msg += `👤 Novo responsável: ${assigneeName}\n`
 
   return msg.trim()
 }

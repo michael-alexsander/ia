@@ -18,6 +18,7 @@ export interface ParsedIntent {
     novo_status?: 'open' | 'in_progress' | 'done'
     novo_titulo?: string
     novo_prazo?: string
+    novo_responsavel?: string
   }
   confidence: number
 }

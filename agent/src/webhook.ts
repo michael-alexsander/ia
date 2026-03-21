@@ -7,6 +7,7 @@ import { MsgContext } from './types'
 import { tryLinkByCode, tryLinkGroup } from './handlers'
 
 const BOT_JID = process.env.BOT_JID! // ex: 553189507577@s.whatsapp.net
+const BOT_LID = process.env.BOT_LID  // LID do bot no WhatsApp, ex: 50801628172409
 
 function extractText(message: Record<string, unknown>): string {
   return (
@@ -20,10 +21,19 @@ function extractText(message: Record<string, unknown>): string {
 function isBotMentioned(message: Record<string, unknown>): boolean {
   const botPhone = BOT_JID.replace('@s.whatsapp.net', '')
   const text = extractText(message)
+
+  // Checa menção via JID ou LID no texto
+  if (text.includes(`@${botPhone}`)) return true
+  if (BOT_LID && text.includes(`@${BOT_LID}`)) return true
+
+  // Checa mentionedJid em extendedTextMessage
   const extMsg = message?.extendedTextMessage as Record<string, unknown> | undefined
   const ctxInfo = extMsg?.contextInfo as Record<string, unknown> | undefined
   const mentioned: string[] = (ctxInfo?.mentionedJid as string[]) ?? []
-  return mentioned.includes(BOT_JID) || text.includes(`@${botPhone}`)
+  if (mentioned.includes(BOT_JID)) return true
+  if (BOT_LID && mentioned.some(j => j.includes(BOT_LID))) return true
+
+  return false
 }
 
 function cleanMentions(text: string): string {
