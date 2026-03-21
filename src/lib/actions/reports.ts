@@ -60,7 +60,7 @@ export async function sendReport(params: {
             number:    phone,
             mediatype: 'document',
             mimetype:  'application/pdf',
-            media:     `data:application/pdf;base64,${pdfBase64}`,
+            media:     pdfBase64,
             fileName:  filename,
             caption:   '📊 Relatório de Tarefas',
           }),

@@ -87,7 +87,11 @@ export async function handleWebhook(req: Request, res: Response): Promise<void> 
       if (linkReply) {
         await sendText(remoteJid, linkReply)
       } else {
-        console.log(`[webhook] número desconhecido sem código válido: ${senderPhone}`)
+        await sendText(remoteJid,
+          `❓ Não reconheço seu número.\n\n` +
+          `Se você foi convidado, envie o código de 6 letras/números que recebeu.\n` +
+          `Se o código não funcionar, peça um novo convite ao administrador.`
+        )
       }
       return
     }

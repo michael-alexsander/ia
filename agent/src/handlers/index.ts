@@ -24,7 +24,7 @@ export async function tryLinkByCode(jid: string, text: string): Promise<string |
   const token = text.trim().toUpperCase().replace(/\s+/g, '')
   if (token.length < 4) return null
 
-  const { data: invite } = await supabase
+  const { data: invite, error: inviteErr } = await supabase
     .from('invites')
     .select('id, workspace_id, email, whatsapp, role')
     .eq('token', token)
@@ -33,24 +33,34 @@ export async function tryLinkByCode(jid: string, text: string): Promise<string |
     .limit(1)
     .single()
 
-  if (!invite) return null
+  if (inviteErr || !invite) {
+    console.log(`[link] token "${token}" não encontrado ou expirado`, inviteErr?.message)
+    return null
+  }
 
   // Encontra o membro pelo whatsapp real (campo visível) ou email do convite
-  const orFilter = [
-    invite.whatsapp ? `whatsapp.eq.${invite.whatsapp}` : null,
-    invite.email    ? `email.eq.${invite.email}`       : null,
-  ].filter(Boolean).join(',')
+  const conditions: string[] = []
+  if (invite.whatsapp) conditions.push(`whatsapp.eq.${invite.whatsapp}`)
+  if (invite.email)    conditions.push(`email.eq.${invite.email}`)
 
-  const { data: member } = await supabase
+  if (!conditions.length) {
+    console.log(`[link] convite sem whatsapp nem email — id: ${invite.id}`)
+    return null
+  }
+
+  const { data: member, error: memberErr } = await supabase
     .from('members')
     .select('id, name')
     .eq('workspace_id', invite.workspace_id)
     .eq('status', 'invited')
-    .or(orFilter)
+    .or(conditions.join(','))
     .limit(1)
     .single()
 
-  if (!member) return null
+  if (memberErr || !member) {
+    console.log(`[link] membro convidado não encontrado para token "${token}"`, memberErr?.message)
+    return null
+  }
 
   // Grava o JID interno e ativa o membro
   await Promise.all([
@@ -58,8 +68,14 @@ export async function tryLinkByCode(jid: string, text: string): Promise<string |
     supabase.from('invites').update({ accepted: true }).eq('id', invite.id),
   ])
 
-  console.log(`[link] ${member.name} vinculado — JID: ${jid}`)
-  return `✅ Olá, *${member.name}*! Seu WhatsApp foi vinculado ao TarefaApp.\nDigite *ajuda* para ver os comandos disponíveis.`
+  console.log(`[link] ${member.name} ativado — JID: ${jid}`)
+  return (
+    `✅ Olá, *${member.name}*! Sua conta foi ativada com sucesso!\n\n` +
+    `Agora você pode gerenciar suas tarefas aqui pelo WhatsApp.\n\n` +
+    `Para acessar o painel web, entre em:\n` +
+    `🔗 app.tarefa.app/login\n\n` +
+    `Digite *ajuda* para ver os comandos disponíveis.`
+  )
 }
 
 // Vincula um grupo do WhatsApp a um grupo do TarefaApp via link_code

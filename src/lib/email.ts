@@ -113,10 +113,11 @@ export async function sendInviteEmail({
 </body>
 </html>`
 
-  await resend.emails.send({
+  const { error } = await resend.emails.send({
     from: FROM,
     to,
     subject,
     html,
   })
+  if (error) throw new Error(error.message)
 }
