@@ -38,27 +38,38 @@ export async function tryLinkByCode(jid: string, text: string): Promise<string |
     return null
   }
 
-  // Encontra o membro pelo whatsapp real (campo visível) ou email do convite
-  const conditions: string[] = []
-  if (invite.whatsapp) conditions.push(`whatsapp.eq.${invite.whatsapp}`)
-  if (invite.email)    conditions.push(`email.eq.${invite.email}`)
+  // Encontra o membro — busca separada por whatsapp e email para evitar
+  // problemas de encoding do '+' no filtro .or() do PostgREST
+  let member: { id: string; name: string } | null = null
 
-  if (!conditions.length) {
-    console.log(`[link] convite sem whatsapp nem email — id: ${invite.id}`)
-    return null
+  if (invite.whatsapp) {
+    const { data, error } = await supabase
+      .from('members')
+      .select('id, name')
+      .eq('workspace_id', invite.workspace_id)
+      .eq('status', 'invited')
+      .eq('whatsapp', invite.whatsapp)
+      .limit(1)
+      .single()
+    if (error) console.log(`[link] busca por whatsapp falhou:`, error.message)
+    if (data) member = data
   }
 
-  const { data: member, error: memberErr } = await supabase
-    .from('members')
-    .select('id, name')
-    .eq('workspace_id', invite.workspace_id)
-    .eq('status', 'invited')
-    .or(conditions.join(','))
-    .limit(1)
-    .single()
+  if (!member && invite.email) {
+    const { data, error } = await supabase
+      .from('members')
+      .select('id, name')
+      .eq('workspace_id', invite.workspace_id)
+      .eq('status', 'invited')
+      .eq('email', invite.email)
+      .limit(1)
+      .single()
+    if (error) console.log(`[link] busca por email falhou:`, error.message)
+    if (data) member = data
+  }
 
-  if (memberErr || !member) {
-    console.log(`[link] membro convidado não encontrado para token "${token}"`, memberErr?.message)
+  if (!member) {
+    console.log(`[link] membro convidado não encontrado para token "${token}" — wpp: ${invite.whatsapp} email: ${invite.email}`)
     return null
   }
 
