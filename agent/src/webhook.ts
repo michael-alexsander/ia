@@ -4,7 +4,7 @@ import { parseMessage } from './parser'
 import { handleIntent } from './handlers'
 import { sendText } from './evolution'
 import { MsgContext } from './types'
-import { tryLinkByCode } from './handlers'
+import { tryLinkByCode, tryLinkGroup } from './handlers'
 
 const BOT_JID = process.env.BOT_JID! // ex: 553189507577@s.whatsapp.net
 
@@ -95,6 +95,17 @@ export async function handleWebhook(req: Request, res: Response): Promise<void> 
     }
 
     console.log(`[webhook] ${ctx.memberName} → "${rawText}"`)
+
+    // Em grupos: intercepta código de vinculação LINK-XXXXX antes do OpenAI
+    if (isGroup && /^LINK-[A-Z0-9]{5}$/i.test(rawText.trim())) {
+      if (ctx.memberRole !== 'admin') {
+        await sendText(remoteJid, `❌ Apenas administradores podem vincular grupos.`)
+        return
+      }
+      const linkReply = await tryLinkGroup(remoteJid, rawText.trim(), ctx.memberId, ctx.workspaceId)
+      await sendText(remoteJid, linkReply)
+      return
+    }
 
     // Processa com OpenAI
     const parsed = await parseMessage(rawText)

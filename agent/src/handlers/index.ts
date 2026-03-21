@@ -62,6 +62,40 @@ export async function tryLinkByCode(jid: string, text: string): Promise<string |
   return `✅ Olá, *${member.name}*! Seu WhatsApp foi vinculado ao TarefaApp.\nDigite *ajuda* para ver os comandos disponíveis.`
 }
 
+// Vincula um grupo do WhatsApp a um grupo do TarefaApp via link_code
+export async function tryLinkGroup(
+  groupJid: string,
+  linkCode: string,
+  memberId: string,
+  workspaceId: string
+): Promise<string> {
+  const code = linkCode.trim().toUpperCase()
+
+  const { data: group } = await supabase
+    .from('groups')
+    .select('id, name, workspace_id, whatsapp_group')
+    .eq('link_code', code)
+    .eq('workspace_id', workspaceId)
+    .limit(1)
+    .single()
+
+  if (!group) {
+    return `❌ Código *${code}* inválido. Verifique o código no app web e tente novamente.`
+  }
+
+  if (group.whatsapp_group) {
+    return `⚠️ O grupo *${group.name}* já está vinculado a um grupo do WhatsApp.`
+  }
+
+  await supabase
+    .from('groups')
+    .update({ whatsapp_group: groupJid, linked_at: new Date().toISOString() })
+    .eq('id', group.id)
+
+  console.log(`[link-group] grupo "${group.name}" vinculado — JID: ${groupJid}`)
+  return `✅ Grupo *${group.name}* vinculado com sucesso!\nAgora posso receber comandos aqui. Mencione *@TarefaApp ajuda* para ver o que posso fazer.`
+}
+
 export async function handleIntent(
   ctx: MsgContext,
   parsed: ParsedIntent
