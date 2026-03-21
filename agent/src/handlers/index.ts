@@ -1,0 +1,83 @@
+import { MsgContext, ParsedIntent } from '../types'
+import { criarTarefa, listarTarefas, concluirTarefa, atualizarTarefa } from './tasks'
+import { supabase } from '../supabase'
+
+const HELP_MSG = `👋 *TarefaApp — Comandos*
+
+📋 *Tarefas*
+• *criar tarefa* [título] — cria uma nova tarefa
+• *listar tarefas* — vê as tarefas abertas
+• *concluir* [ID] — marca como concluída
+• *atualizar* [ID] — edita uma tarefa
+
+💡 *Exemplos:*
+• criar tarefa Revisar proposta para João até sexta
+• criar tarefa Reunião de alinhamento responsável Ana grupo Vendas
+• listar tarefas
+• concluir AB123
+• atualizar AB123 novo prazo segunda`
+
+// Tenta vincular um JID desconhecido via código de convite.
+// O token é gerado no web app e enviado automaticamente via WhatsApp para o novo membro.
+// Quando o membro envia o código, o agent grava o JID em whatsapp_jid e ativa a conta.
+export async function tryLinkByCode(jid: string, text: string): Promise<string | null> {
+  const token = text.trim().toUpperCase().replace(/\s+/g, '')
+  if (token.length < 4) return null
+
+  const { data: invite } = await supabase
+    .from('invites')
+    .select('id, workspace_id, email, whatsapp, role')
+    .eq('token', token)
+    .eq('accepted', false)
+    .gt('expires_at', new Date().toISOString())
+    .limit(1)
+    .single()
+
+  if (!invite) return null
+
+  // Encontra o membro pelo whatsapp real (campo visível) ou email do convite
+  const orFilter = [
+    invite.whatsapp ? `whatsapp.eq.${invite.whatsapp}` : null,
+    invite.email    ? `email.eq.${invite.email}`       : null,
+  ].filter(Boolean).join(',')
+
+  const { data: member } = await supabase
+    .from('members')
+    .select('id, name')
+    .eq('workspace_id', invite.workspace_id)
+    .eq('status', 'invited')
+    .or(orFilter)
+    .limit(1)
+    .single()
+
+  if (!member) return null
+
+  // Grava o JID interno e ativa o membro
+  await Promise.all([
+    supabase.from('members').update({ whatsapp_jid: jid, status: 'active' }).eq('id', member.id),
+    supabase.from('invites').update({ accepted: true }).eq('id', invite.id),
+  ])
+
+  console.log(`[link] ${member.name} vinculado — JID: ${jid}`)
+  return `✅ Olá, *${member.name}*! Seu WhatsApp foi vinculado ao TarefaApp.\nDigite *ajuda* para ver os comandos disponíveis.`
+}
+
+export async function handleIntent(
+  ctx: MsgContext,
+  parsed: ParsedIntent
+): Promise<string> {
+  switch (parsed.intent) {
+    case 'criar_tarefa':
+      return criarTarefa(ctx, parsed.entities)
+    case 'listar_tarefas':
+      return listarTarefas(ctx, parsed.entities)
+    case 'concluir_tarefa':
+      return concluirTarefa(ctx, parsed.entities)
+    case 'atualizar_tarefa':
+      return atualizarTarefa(ctx, parsed.entities)
+    case 'ajuda':
+      return HELP_MSG
+    default:
+      return `🤔 Não entendi. Digite *ajuda* para ver os comandos disponíveis.`
+  }
+}
