@@ -3,6 +3,7 @@
 import { useActionState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createWorkspace } from '@/lib/actions/workspace'
+import Image from 'next/image'
 
 const initialState = { error: undefined as string | undefined, success: false }
 
@@ -18,16 +19,12 @@ export default function OnboardingPage() {
   }, [state?.success, router])
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#f5f5f5]">
-      <div className="bg-white rounded-xl shadow-sm border border-[#e5e7eb] w-full max-w-sm p-8">
-        <div className="flex justify-center mb-6">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[#128c7e] flex items-center justify-center">
-              <span className="text-white font-bold text-sm">T</span>
-            </div>
-            <span className="font-bold text-lg text-[#128c7e]">TarefaApp</span>
-          </div>
+    <div className="min-h-screen flex items-center justify-center bg-[#128c7e]">
+      <div className="bg-white rounded-xl shadow-lg w-full max-w-sm overflow-hidden">
+        <div className="bg-[#128c7e] flex items-center justify-center px-8 py-6">
+          <Image src="/logo.png" alt="TarefaApp" width={260} height={64} className="h-14 w-auto object-contain" priority />
         </div>
+        <div className="p-8">
 
         <h1 className="text-xl font-semibold text-center mb-1">Crie sua empresa</h1>
         <p className="text-sm text-[#6b7280] text-center mb-6">
@@ -55,6 +52,7 @@ export default function OnboardingPage() {
             {isPending || state?.success ? 'Criando...' : 'Criar e entrar'}
           </button>
         </form>
+        </div>
       </div>
     </div>
   )

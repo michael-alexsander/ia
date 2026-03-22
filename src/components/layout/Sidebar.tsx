@@ -35,19 +35,54 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onMobileClose
     <aside className={`
       flex flex-col h-full bg-white border-r border-[#e5e7eb]
       transition-all duration-200
-      ${!isMobile && (collapsed ? 'w-16' : 'w-56')}
+      ${!isMobile && (collapsed ? 'w-16' : 'w-60')}
       ${isMobile ? 'w-64' : ''}
     `}>
-      {/* Logo */}
-      <div className={`bg-[#128c7e] flex items-center shrink-0 ${collapsed && !isMobile ? 'p-3 justify-center' : 'px-4 py-3'}`}>
+      {/* Logo + toggle de colapso no topo */}
+      <div className={`bg-[#128c7e] flex items-center shrink-0 ${collapsed && !isMobile ? 'flex-col gap-2 py-3 px-2' : 'px-3 py-2'}`}>
         {collapsed && !isMobile ? (
-          <Image src="/favicon.png" alt="T" width={32} height={32} className="w-8 h-8 object-contain" priority />
+          <>
+            {/* Favicon centralizado */}
+            <Image
+              src="/favicon.png"
+              alt="T"
+              width={36}
+              height={36}
+              className="w-9 h-9 object-contain"
+              priority
+            />
+            {/* Botão expandir */}
+            <button
+              onClick={onToggleCollapse}
+              title="Expandir menu"
+              className="text-white/70 hover:text-white transition-colors"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </>
         ) : (
-          <div className="flex items-center justify-between w-full">
-            <Image src="/logo.png" alt="TarefaApp" width={150} height={38} className="h-8 w-auto object-contain" priority />
-            {isMobile && (
-              <button onClick={onMobileClose} className="text-white/80 hover:text-white ml-2">
+          <div className="flex items-center justify-between w-full gap-1">
+            {/* Logo full-width */}
+            <Image
+              src="/logo.png"
+              alt="TarefaApp"
+              width={200}
+              height={48}
+              className="h-10 w-auto max-w-full object-contain flex-1 min-w-0"
+              priority
+            />
+            {/* Botão recolher (desktop) ou fechar (mobile) */}
+            {isMobile ? (
+              <button onClick={onMobileClose} className="text-white/80 hover:text-white shrink-0 ml-1">
                 <X size={18} />
+              </button>
+            ) : (
+              <button
+                onClick={onToggleCollapse}
+                title="Recolher menu"
+                className="text-white/70 hover:text-white shrink-0 ml-1 transition-colors"
+              >
+                <ChevronLeft size={16} />
               </button>
             )}
           </div>
@@ -76,8 +111,8 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onMobileClose
         })}
       </nav>
 
-      {/* Bottom: Logout + Collapse toggle */}
-      <div className="px-2 py-3 border-t border-[#e5e7eb] flex flex-col gap-1">
+      {/* Rodapé: só Sair */}
+      <div className="px-2 py-3 border-t border-[#e5e7eb]">
         <button
           onClick={handleLogout}
           title={collapsed && !isMobile ? 'Sair' : undefined}
@@ -88,18 +123,6 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onMobileClose
           <LogOut size={16} className="shrink-0" />
           {(!collapsed || isMobile) && 'Sair'}
         </button>
-
-        {/* Collapse toggle — desktop only */}
-        {!isMobile && (
-          <button
-            onClick={onToggleCollapse}
-            className={`flex items-center gap-3 px-3 py-2 rounded-lg w-full text-xs text-[#6b7280] hover:bg-[#f5f5f5] transition-colors
-              ${collapsed ? 'justify-center' : ''}
-            `}
-          >
-            {collapsed ? <ChevronRight size={15} /> : <><ChevronLeft size={15} /><span>Recolher menu</span></>}
-          </button>
-        )}
       </div>
     </aside>
   )

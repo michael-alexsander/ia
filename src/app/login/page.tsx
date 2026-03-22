@@ -53,18 +53,16 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#f5f5f5]">
-      <div className="bg-white rounded-xl shadow-sm border border-[#e5e7eb] w-full max-w-sm p-8">
+    <div className="min-h-screen flex items-center justify-center bg-[#128c7e]">
+      <div className="bg-white rounded-xl shadow-lg w-full max-w-sm overflow-hidden">
 
-        {/* Logo */}
-        <div className="flex justify-center mb-8">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-[#128c7e] flex items-center justify-center">
-              <span className="text-white font-bold text-sm">T</span>
-            </div>
-            <span className="font-bold text-lg text-[#128c7e]">TarefaApp</span>
-          </div>
+        {/* Logo — fundo verde idêntico ao da imagem, sem borda visível */}
+        <div className="bg-[#128c7e] flex items-center justify-center px-8 py-6">
+          <Image src="/logo.png" alt="TarefaApp" width={260} height={64} className="h-14 w-auto object-contain" priority />
         </div>
+
+        {/* Conteúdo */}
+        <div className="p-8">
 
         {/* Opções iniciais */}
         {mode === 'options' && (
@@ -175,6 +173,7 @@ export default function LoginPage() {
             )}
           </>
         )}
+        </div>
       </div>
     </div>
   )
