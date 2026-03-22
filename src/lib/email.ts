@@ -2,9 +2,7 @@ import { Resend } from 'resend'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
-// Remetente: usar domínio verificado em produção.
-// Por enquanto usa onboarding@resend.dev (funciona sem verificar domínio).
-const FROM = 'TarefaApp <onboarding@resend.dev>'
+const FROM = 'TarefaApp <contato@melhoragencia.ai>'
 
 export async function sendInviteEmail({
   to,
