@@ -1,17 +1,17 @@
 # PRD — Gestor de Tarefas e Equipes AI
 **Produto:** MelhorAgencia.ai
-**Agente:** Gestor de Tarefas e Equipes
-**Versão:** 1.3
-**Data:** 2026-03-21
-**Status:** Em desenvolvimento (MVP parcialmente implementado)
+**Agente:** TarefaApp — Gestor de Tarefas e Equipes
+**Versão:** 2.0
+**Data:** 2026-03-22
+**Status:** MVP em produção — https://app.tarefa.app
 
 ---
 
 ## 1. Visão Geral
 
-O **Gestor de Tarefas e Equipes AI** é o primeiro agente da plataforma MelhorAgencia.ai. Ele opera via WhatsApp (Evolution API) como canal principal de interação diária, complementado por uma **interface web minimalista** para configurações, visualização e gestão estruturada.
+O **TarefaApp** é o primeiro agente da plataforma MelhorAgencia.ai. Opera via **WhatsApp** (Evolution API) como canal principal de interação diária, complementado por uma **interface web** para gestão estruturada, visualização e configuração.
 
-É a evolução do Tarefa.app: em vez de um bot com comandos rígidos, é um agente com inteligência contextual, comportamento proativo, memória compartilhada e uma camada visual para o que o WhatsApp não resolve bem.
+É a evolução do Tarefa.app: em vez de um bot com comandos rígidos, é um agente com inteligência contextual (gpt-4o-mini), comportamento proativo via cron jobs, e uma camada visual para o que o WhatsApp não resolve bem.
 
 ---
 
@@ -19,7 +19,7 @@ O **Gestor de Tarefas e Equipes AI** é o primeiro agente da plataforma MelhorAg
 
 > *"A experiência de criar, editar e concluir uma tarefa deve ser simples para o funcionário, e eu, como administrador, preciso mensurar a produtividade diária, semanal e mensal de todo o time."*
 
-Hoje o fluxo de gestão de tarefas exige que o gestor saia do WhatsApp para registrar, acompanhar e cobrar tarefas. O resultado é perda de contexto, tarefas esquecidas e nenhuma visibilidade real de produtividade.
+Gestores saem do WhatsApp para registrar e cobrar tarefas → perda de contexto, tarefas esquecidas, zero visibilidade de produtividade.
 
 ---
 
@@ -29,14 +29,14 @@ Hoje o fluxo de gestão de tarefas exige que o gestor saia do WhatsApp para regi
 - Cria tarefas para si e para qualquer membro do time
 - Acompanha produtividade individual e coletiva
 - Recebe relatórios automáticos diários, semanais e mensais
-- Tem visão completa de todas as tarefas abertas e concluídas
-- Pode promover outros membros a Admin
-- Acessa e configura tudo via interface web ou WhatsApp
+- Convida membros para o workspace
+- Configura horários de relatórios e lembretes
+- Acessa tudo via interface web ou WhatsApp
 
 ### 3.2 Colaborador
-- Recebe tarefas atribuídas pelo admin ou cria as próprias
-- Atualiza status das suas tarefas (concluir, editar, excluir)
-- Interage com o agente via linguagem natural no grupo ou no privado
+- Recebe tarefas atribuídas ou cria as próprias
+- Atualiza status (concluir, editar)
+- Interage com o agente via linguagem natural (grupo ou privado)
 - Acessa interface web para visualizar e gerenciar suas tarefas
 
 ---
@@ -45,303 +45,117 @@ Hoje o fluxo de gestão de tarefas exige que o gestor saia do WhatsApp para regi
 
 | Canal | Quem usa | Como acionar |
 |---|---|---|
-| Grupo do WhatsApp da empresa | Admin + Colaboradores | Mencionar `@GestorAI` |
-| Chat privado com o agente | Admin + Colaboradores | Mensagem direta |
-| Interface web (dashboard) | Admin + Colaboradores | Login via Google OAuth |
+| Grupo WhatsApp da empresa | Admin + Colaboradores | Mencionar `@TarefaApp` |
+| Chat privado com o bot | Admin + Colaboradores | Mensagem direta |
+| Interface web (dashboard) | Admin + Colaboradores | app.tarefa.app |
 
 ---
 
-## 5. Interface Web — Minimalista
+## 5. Interface Web — Implementada
 
-Stack: **Next.js** + **Supabase** + **Tailwind CSS**
-Autenticação: **Google OAuth** (um clique, sem senha) · **Email + Senha** · **Magic Link por e-mail**
+**Stack:** Next.js 15 (App Router) + Supabase + Tailwind CSS 4 + React 19
+**Auth:** Google OAuth · Email + Senha · Magic Link por e-mail
+**Deploy:** Vercel → app.tarefa.app
+**Layout:** Sidebar colapsável (desktop) + drawer mobile + responsivo
 
-### 5.1 Páginas e Seções
+### 5.1 Páginas
 
-#### Tarefas (`/tasks`)
-- Lista de tarefas com filtros: data, status, ID, responsável, grupo
-- Colunas: ID, título, responsável, prazo, status, ações
-- Status visual: `Aberta` · `Andamento` · `Concluída`
-- **Botão único** "Nova Tarefa" (modal simples)
-- Cada tarefa tem botões inline: **Editar** e **Excluir**
-- Baixar lista filtrada em **PDF**
-- Enviar relatório filtrado diretamente por **WhatsApp** ou **E-mail** para qualquer membro cadastrado
+#### `/login`
+- Card com logo TarefaApp em header verde
+- 3 opções: Google OAuth, Email+Senha, Magic Link
 
-#### Membros (`/members`)
-- Lista de todos os membros da empresa com nome, função, e nível de acesso
-- CRUD completo: criar, editar, remover membro
-- Convidar novo membro via **número de WhatsApp** (envia código de 6 chars automaticamente) ou **e-mail** (a implementar)
-- Definir se o membro é **Admin** ou **Colaborador**
+#### `/onboarding`
+- Criação de workspace (empresa) no primeiro login
+- Membros convidados pulam esta etapa automaticamente (auto-link por email)
 
-#### Grupos (`/groups`)
-- Lista de grupos da empresa
-- CRUD completo: criar, editar, remover grupo
-- Associar membros a grupos
-- Visualizar tarefas por grupo
+#### `/tasks` — Tarefas ✅
+- **Toolbar linha 1 (topo-direita):** Relatório PDF + Nova Tarefa
+- **Toolbar linha 2 (filtros):** Busca (ID/Título) | Responsável | Grupo | Prazo (de–até) | Status | Limpar
+- Filtro padrão: tarefas do usuário logado
+- Paginação: 10 tarefas/página com navegação (‹ Anterior / Próxima › + números)
+- Colunas: ID · Título · Responsável · Grupo · Prazo · Status · Ações
+- Status inline editável: `Aberta` · `Andamento` · `Concluída`
+- Highlight visual: vermelho = vencida, amarelo = vence hoje
+- Modal criar/editar: título, descrição, responsável, grupo, prazo (data + hora)
+- Relatório PDF: jsPDF + autoTable — download local + envio WhatsApp e/ou email
 
-#### Configurações (`/settings`)
-- **Relatórios automáticos:** Admin marca quais quer receber (Diário / Semanal / Mensal / Todos) e por qual canal (WhatsApp / E-mail / Ambos)
-- **Lembretes:** Admin define quando chegam para ele e para os colaboradores:
-  - [ ] 1 dia antes do vencimento
-  - [ ] 1 hora antes do vencimento
-  - [ ] No dia do vencimento
-- **Alertas de atraso:** Admin marca se quer receber notificação de tarefas vencidas no dia seguinte ao vencimento
-- **Admins adicionais:** Admin pode promover outros membros a Admin
+#### `/members` — Membros ✅
+- Lista: avatar, nome (ícone coroa para admin), contato, função, status
+- Convidar membro: DDI +55 fixo + número DDD+tel + email opcional
+- Envio automático: código 6-chars por WhatsApp + email (Resend)
+- Editar / Remover membros
+
+#### `/groups` — Grupos ✅
+- CRUD de grupos + associação de membros
+- Código `LINK-XXXXX` para vincular ao grupo do WhatsApp
+
+#### `/settings` — Configurações ✅
+- Horário relatório manhã / noite (por workspace)
+- `reminder_hours_before`: X horas antes do prazo para lembrete
 
 ---
 
-## 6. Funcionalidades do Agente (WhatsApp)
+## 6. Agent WhatsApp — Implementado
 
-### 6.1 MVP — Essenciais
+### 6.1 Comandos (linguagem natural via gpt-4o-mini)
 
-#### CRUD de Tarefas (linguagem natural)
-- **Criar tarefa:** Mensagem em linguagem natural. O agente extrai responsável, prazo e descrição, confirma e salva. Retorna o ID da tarefa criada.
-  - Exemplo: *"@GestorAI cria uma tarefa pro Luiz entregar o layout até sexta"*
-  - Resposta: *"Tarefa criada ✓ | ID: **T25A3** | Responsável: Luiz | Prazo: 21/03 18h"*
-- **Visualizar tarefas:** Listar tarefas por responsável, status ou ID.
-  - Exemplo: *"@GestorAI quais tarefas abertas do Luiz?"*
-- **Editar tarefa:** Alterar prazo, responsável, status ou descrição via ID ou contexto.
-  - Exemplo: *"@GestorAI muda o prazo da T25A3 para segunda"*
-- **Concluir tarefa:** Colaborador conclui pelo ID ou contexto.
-  - Exemplo: *"Conclui a T25A3"*
-- **Excluir tarefa:** Admin ou responsável exclui pelo ID.
-
-#### ID das Tarefas
-- Código alfanumérico de 5 caracteres gerado aleatoriamente. Exemplo: `T25A3`, `K9BX1`
-- Aparece em toda comunicação WhatsApp referente à tarefa
-- Aparece na coluna ID da interface web
-- Usado para referenciar a tarefa de forma precisa em comandos
-
-#### Status das Tarefas
-Cada tarefa possui exatamente 3 status:
-
-| Status | Descrição |
+| Intent | Exemplo |
 |---|---|
-| `Aberta` | Tarefa criada, ainda não iniciada |
-| `Andamento` | Em execução pelo responsável |
-| `Concluída` | Finalizada |
+| `criar_tarefa` | "cria uma tarefa pro Luiz entregar o layout até sexta" |
+| `listar_tarefas` | "quais tarefas abertas do Luiz?" |
+| `atualizar_tarefa` | "muda o prazo da AB123 para segunda" |
+| `concluir_tarefa` | "conclui a AB123" |
+| `ajuda` | "ajuda" |
 
-#### Atribuição e Notificação
-- Ao criar tarefa para um colaborador, o agente notifica o colaborador no privado com os detalhes e o ID.
-- O colaborador pode aceitar, pedir ajuste de prazo ou reportar impedimento.
+### 6.2 Identificação de usuários
+- Membro identificado por `whatsapp_jid` (LID interno da Evolution API)
+- Em grupos: bot identificado por `BOT_LID` (não pelo número de telefone)
+- Privado e grupo suportados
 
-#### Tarefas Recorrentes
-- Admin define tarefas que se repetem (diária, semanal, mensal).
-- O agente cria automaticamente no ciclo definido com novo ID a cada ocorrência.
+### 6.3 Fluxo de ativação de membro
+1. Admin convida via web → código 6-chars enviado por WhatsApp + email
+2. Convidado envia código no chat com o bot
+3. Bot ativa o membro e responde com confirmação + link app.tarefa.app/login
 
-#### Lembretes Automáticos
-- Configuráveis por Admin via interface web (seção Configurações).
-- Opções: 1 dia antes, 1 hora antes, no dia do vencimento.
+### 6.4 Vinculação de grupo WhatsApp
+- Admin copia código `LINK-XXXXX` do grupo no app web
+- Envia o código no grupo do WhatsApp com o bot adicionado
+- Bot detecta, vincula o grupo e confirma
 
-#### Cobranças de Entrega (Proativo)
-- Se uma tarefa vencer sem conclusão, o agente notifica o responsável e o admin.
-- Se configurado, envia alerta no dia seguinte ao vencimento também.
+### 6.5 Relatórios automáticos (cron)
 
-#### Relatórios Automáticos
+| Relatório | Frequência | Conteúdo |
+|---|---|---|
+| Diário manhã | Configurável (padrão 08h BRT) | Vencidas + vence hoje + vence em 2 dias |
+| Diário noite | Configurável (padrão 18h BRT) | Concluídas hoje + abertas |
+| Semanal | Segunda 08h BRT | Produtividade da semana |
+| Mensal | Dia 1 às 08h BRT | Ranking de produtividade do mês |
+| Lembretes | A cada 30min | X horas antes do prazo (configurável) |
 
-| Relatório | Horário | Conteúdo | Destinatário |
-|---|---|---|---|
-| Diário manhã | 08h | Tarefas abertas do dia por pessoa | Admin |
-| Diário noite | 18h | Tarefas concluídas no dia | Admin |
-| Semanal | Segunda 08h | Resumo de produtividade da semana | Admin |
-| Mensal | Dia 1 às 08h | Resumo de produtividade do mês | Admin |
-| Sob demanda | Quando solicitado | De acordo com o pedido | Quem pediu |
-
-> Relatórios são enviados por WhatsApp e/ou e-mail conforme configurado pelo Admin.
-
-#### Relatório Sob Demanda
-- Exemplo: *"Me mostra a produtividade do Luiz essa semana"*
-- Agente responde com resumo formatado no WhatsApp.
+### 6.6 Entidades extraídas pelo parser
+`responsavel`, `prazo`, `hora`, `status`, `titulo`, `task_id`, `grupo`, `descricao`, `novo_responsavel`, `novo_prazo`, `nova_hora`
 
 ---
 
-### 6.2 Nice to Have (pós-MVP)
+## 7. Modelo de Negócio
 
-- Sistema de pontuação por tarefa (dificuldade/importância)
-- Gamificação semanal entre colaboradores (ranking/coroa)
-- Integração com Google Calendar (tarefas com prazo viram eventos)
-- Integração com Gmail (notificação por email nativa)
-
----
-
-## 7. Fluxos Principais
-
-### Fluxo 1 — Criar Tarefa via WhatsApp
-```
-Admin no grupo → "@GestorAI cria tarefa pro Luiz: entregar layout da home até sexta 18h"
-  → Agente confirma: "Confirma? Tarefa: 'Entregar layout da home' | Responsável: Luiz | Prazo: 21/03 18h"
-  → Admin responde "sim"
-  → Tarefa salva no Supabase com ID gerado (ex: T25A3)
-  → Agente responde no grupo: "Tarefa criada ✓ | ID: T25A3"
-  → Agente notifica Luiz no privado: "Nova tarefa para você! ID: T25A3 | 'Entregar layout da home' | Prazo: 21/03 18h"
-```
-
-### Fluxo 2 — Concluir Tarefa
-```
-Luiz no privado → "Conclui a T25A3"
-  → Agente confirma conclusão
-  → Atualiza status no Supabase para "Concluída"
-  → Notifica o Admin: "Luiz concluiu a T25A3 — 'Entregar layout da home' ✓"
-```
-
-### Fluxo 3 — Tarefa Atrasada (Proativo)
-```
-Prazo vencido sem conclusão
-  → Agente notifica o responsável: "Oi Luiz, a tarefa T25A3 venceu hoje. Consegue concluir?"
-  → Agente notifica o Admin: "Tarefa em atraso | T25A3 — 'Entregar layout da home' | Responsável: Luiz"
-  → Se configurado: no dia seguinte envia novo alerta
-```
-
-### Fluxo 4 — Relatório Diário (Proativo)
-```
-Todos os dias às 08h
-  → Agente envia para Admin (WhatsApp e/ou email):
-
-  "Bom dia, Michael! Resumo de hoje — 18/03
-
-  📋 Tarefas abertas: 8
-  • Luiz (2): T25A3 Layout home | T18B2 Revisão copy
-  • Ana (3): ...
-
-  ⚠️ Em atraso: 1
-  • Pedro: T09C1 Planilha de custos (venceu ontem)"
-```
-
-### Fluxo 5 — Onboarding de Membro via WhatsApp (implementado)
-```
-Admin em /members → "Convidar membro"
-  → Preenche nome + número de WhatsApp real (+5531XXXXXXXXX)
-  → Sistema gera código de 6 chars (ex: AB12CD), armazena em `invites` com expires_at de 7 dias
-  → Sistema envia o código automaticamente via WhatsApp para o número informado
-  → Membro envia o código para o bot TarefaApp no privado
-  → Bot identifica o invite, grava whatsapp_jid do membro, ativa status para 'active'
-```
+- Assinatura por agente (planos: small, medium, large)
+- Integração de pagamento: Celcoin (pendente)
+- Early adopters após 2 agentes funcionando
 
 ---
 
-## 8. Regras de Negócio
-
-1. Apenas **Admin** pode criar tarefas para outros membros.
-2. **Colaboradores** só podem criar tarefas para si mesmos (MVP).
-3. Qualquer membro pode concluir ou editar suas próprias tarefas.
-4. Apenas **Admin** pode excluir tarefas de outros.
-5. O agente sempre pede **confirmação** antes de criar ou excluir uma tarefa.
-6. Máximo de **2 edições por sessão** de criação de tarefa via WhatsApp.
-7. Se o agente não identificar responsável ou prazo, pergunta antes de criar.
-8. Cada empresa é um **workspace isolado** — nenhum dado vaza entre clientes.
-9. Um Admin pode promover outros membros a Admin via interface web ou WhatsApp.
-10. O ID da tarefa é único dentro do workspace da empresa.
-11. O campo `whatsapp` armazena o número real (+5531XXXXXXXXX) — visível no app web para humanos. O campo `whatsapp_jid` armazena o identificador interno retornado pela Evolution API (LID), usado pelo agente para identificar remetentes. Essa separação é necessária porque o WhatsApp usa LIDs (Linked Identifiers) em versões novas que não correspondem ao número real.
+## 8. Critério de Sucesso — 30 dias
+1.200 tarefas criadas com 12 usuários ativos
 
 ---
 
-## 9. Planos e Limites
+## 9. Roadmap Pós-MVP
 
-| Plano | Grupos | Membros | Tarefas |
-|---|---|---|---|
-| **Small** | 3 | 10 | Ilimitadas |
-| **Medium** | 10 | 30 | Ilimitadas |
-| **Large** | Ilimitados | Ilimitados | Ilimitadas |
-
-- Cobrança por assinatura mensal via **Celcoin API**
-- Preços a definir em documento de pricing separado
-
----
-
-## 10. Memória do Agente
-
-O agente mantém em Supabase:
-
-| Tabela | Descrição |
-|---|---|
-| `workspaces` | Dados da empresa (nome, plano, configurações) |
-| `members` | Nome, telefone, email, função, nível de acesso, whatsapp_jid |
-| `groups` | Grupos da empresa e membros associados |
-| `tasks` | Tarefas com ID, status, responsável, prazo, histórico |
-| `agent_config` | Horários de relatório, canais preferidos, alertas configurados |
-| `conversation_context` | Contexto recente para resolução de ambiguidades |
-| `invites` | Convites pendentes com código de 6 chars e prazo de expiração |
-
-A memória é **compartilhada com outros agentes** da MelhorAgencia.ai.
-
----
-
-## 11. Fora do Escopo — MVP
-
-- Integração com ferramentas externas (Notion, Trello, Google Calendar) — pós-MVP
-- Gestão de projetos com subníveis / épicos
-- Controle de horas trabalhadas
-- Chat entre membros via agente
-- App mobile próprio
-
----
-
-## 12. Critério de Sucesso — 30 dias
-
-| Métrica | Meta |
-|---|---|
-| Tarefas criadas | ≥ 1.200 |
-| Usuários ativos | ≥ 12 |
-| Taxa de conclusão de tarefas | ≥ 60% |
-| Tarefas criadas via linguagem natural sem erro de parsing | ≥ 85% |
-| Admin recebendo relatórios automáticos sem falhas | 100% dos dias |
-
----
-
-## 13. Stack Técnica
-
-| Componente | Tecnologia |
-|---|---|
-| Interface web | Next.js + Tailwind CSS |
-| Autenticação | Google OAuth (via Supabase Auth) |
-| Interface de conversa | WhatsApp via Evolution API 2.3.6 |
-| Lógica do agente | TypeScript / Node.js 20 + tsx + Express |
-| LLM | OpenAI API (`gpt-4o-mini`) |
-| Banco de dados | Supabase (PostgreSQL + pgvector) |
-| Pagamentos | Celcoin API |
-| Hospedagem do agente | VPS Digital Ocean (198.211.112.153) |
-| Gerenciador de processos | PM2 |
-| Frontend / webhooks | Vercel |
-| IDE | Cursor |
-| Engenheiro chefe | Claude Code (não confundir com o LLM do produto) |
-| Repositório | GitHub |
-
----
-
-## 14. Identidade Visual
-
-A interface web segue a identidade do **TarefaApp**, mantendo logotipo e paleta de cores originais.
-
-| Elemento | Valor |
-|---|---|
-| **Cor primária** | `#128c7e` (teal escuro — botões, links, ações principais) |
-| **Cor accent / hover** | `#00baa5` (teal claro — destaques, estados hover) |
-| **Hover de botões** | `#39a878` |
-| **Fundo** | `#ffffff` |
-| **Texto** | `#000000` |
-| **Estilo** | Light · Minimalista · Whitespace generoso |
-| **Logotipo** | Logotipo oficial do TarefaApp (443×107px) |
-| **Tipografia** | H1: 60px · H2: 40px · H3: 30px · Body: 18px / line-height 1.5 |
-
----
-
-## 15. Próximos Passos
-
-- [x] Validar PRD v1.1 com Michael
-- [x] Documento de Arquitetura Técnica
-- [x] Schema do banco de dados (Supabase)
-- [x] Configurar ambiente (Evolution API no VPS Digital Ocean)
-- [x] Desenvolver autenticação Google OAuth
-- [x] Desenvolver interface web minimalista (Next.js)
-- [x] Desenvolver webhook de entrada (recebe mensagem do WhatsApp)
-- [x] Desenvolver parser de linguagem natural (criar tarefa)
-- [x] Desenvolver CRUD completo de tarefas
-- [x] Fluxo de onboarding de membros via WhatsApp (código de convite)
-- [ ] Desenvolver sistema de notificações e lembretes
-- [ ] Desenvolver relatórios automáticos (cron jobs)
-- [ ] Desenvolver geração de PDF e envio por WhatsApp/email
-- [ ] Convidar membro via e-mail (atualmente apenas WhatsApp)
-- [ ] Integrar Celcoin API (planos e assinaturas)
-- [ ] Deploy em produção (domínio final)
-- [ ] Testes internos com o time da MelhorAgencia.ai
-- [ ] Abertura para Early Adopters
+- Celcoin: cobrança automática de assinaturas
+- Logo no PDF e nos emails
+- Notificação ao responsável quando tarefa criada para ele
+- Tarefas recorrentes (diária/semanal/mensal)
+- Sistema de pontuação + gamificação semanal
+- Google Calendar: tarefas com prazo viram eventos
+- Hard delete de membro com limpeza de referências
