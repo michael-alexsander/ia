@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { Sidebar } from '@/components/layout/Sidebar'
+import { DashboardShell } from '@/components/layout/DashboardShell'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -9,7 +9,6 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   if (!user) redirect('/login')
 
-  // Usa admin client para evitar problemas com RLS self-referencial
   const admin = createAdminClient()
   const { data: members } = await admin
     .from('members')
@@ -21,12 +20,5 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const member = members?.[0] ?? null
   if (!member) redirect('/onboarding')
 
-  return (
-    <div className="flex min-h-screen bg-[#f5f5f5]">
-      <Sidebar />
-      <main className="flex-1 p-8 overflow-auto">
-        {children}
-      </main>
-    </div>
-  )
+  return <DashboardShell>{children}</DashboardShell>
 }

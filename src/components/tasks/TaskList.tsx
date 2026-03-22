@@ -318,7 +318,7 @@ export function TaskList({ initialTasks, members, groups }: {
 
       {/* Tabela */}
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[600px] text-sm">
           <thead>
             <tr className="border-b border-[#e5e7eb] bg-[#f9fafb]">
               <th className="text-left px-4 py-3 font-medium text-[#6b7280]">ID</th>
