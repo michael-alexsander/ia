@@ -281,19 +281,7 @@ export function TaskList({ initialTasks, members, groups, currentMemberId }: {
           />
         </div>
 
-        {/* Status */}
-        <select
-          value={statusFilter}
-          onChange={e => { setStatusFilter(e.target.value as TaskStatus | 'all'); resetPage() }}
-          className="text-sm border border-[#e5e7eb] rounded-lg px-3 py-2 outline-none focus:border-[#128c7e] bg-white text-[#6b7280] shrink-0"
-        >
-          <option value="all">Todos os status</option>
-          <option value="open">Aberta</option>
-          <option value="in_progress">Andamento</option>
-          <option value="done">Concluída</option>
-        </select>
-
-        {/* Membro */}
+        {/* Membro (Responsável) */}
         <select
           value={assigneeFilter}
           onChange={e => { setAssigneeFilter(e.target.value); resetPage() }}
@@ -336,6 +324,18 @@ export function TaskList({ initialTasks, members, groups, currentMemberId }: {
             title="Prazo: até"
           />
         </div>
+
+        {/* Status */}
+        <select
+          value={statusFilter}
+          onChange={e => { setStatusFilter(e.target.value as TaskStatus | 'all'); resetPage() }}
+          className="text-sm border border-[#e5e7eb] rounded-lg px-3 py-2 outline-none focus:border-[#128c7e] bg-white text-[#6b7280] shrink-0"
+        >
+          <option value="all">Todos os status</option>
+          <option value="open">Aberta</option>
+          <option value="in_progress">Andamento</option>
+          <option value="done">Concluída</option>
+        </select>
 
         {hasActiveFilters && (
           <button onClick={clearFilters} className="flex items-center gap-1 text-xs text-[#6b7280] hover:text-red-500 transition-colors shrink-0">
