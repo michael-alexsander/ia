@@ -50,6 +50,7 @@ async function verificarRelatoriosHorarios() {
 
     if (hora === morningH) {
       if (cfg.report_daily)                        await enviarLembretesPrazo(cfg.workspace_id)
+      if (cfg.report_daily)                        await enviarRelatorioEquipe(cfg.workspace_id)
       if (cfg.report_weekly  && diaSemana === 1)   await enviarRelatorioSemanal(cfg.workspace_id)
       if (cfg.report_monthly && diaMes    === 1)   await enviarRelatorioMensal(cfg.workspace_id)
     }
@@ -122,9 +123,22 @@ async function verificarLembretesTask() {
   }
 }
 
+// ─── Helper: formata prazo no estilo do listarTarefas ────────────────────────
+function formatarPrazo(due_date: string): string {
+  const dateOnly = due_date.split('T')[0]
+  const d = new Date(dateOnly + 'T12:00:00')
+  const hoje2 = new Date(); hoje2.setHours(0, 0, 0, 0)
+  const diff = Math.round((d.getTime() - hoje2.getTime()) / 86400000)
+  const dateFormatted = d.toLocaleDateString('pt-BR')
+  if (diff < 0)        return `⚠️ Atrasada (${dateFormatted})`
+  if (diff === 0)      return `🔴 Vence hoje`
+  if (diff === 1)      return `🟠 Vence amanhã`
+  return `📅 ${dateFormatted}`
+}
+
 // ─── Lembrete diário manhã ────────────────────────────────────────────────────
-// Membros recebem apenas suas próprias tarefas.
-// Admins recebem visão completa da equipe (todas as tarefas de todos os membros).
+// Todos os membros (incluindo admin) recebem apenas suas próprias tarefas.
+// Formato igual ao listarTarefas do agent.
 
 async function enviarLembretesPrazo(workspaceId: string) {
   console.log(`[cron] Lembretes manhã — workspace ${workspaceId}`)
@@ -133,108 +147,146 @@ async function enviarLembretesPrazo(workspaceId: string) {
   const hojeStr = somaData(hoje, 0)
   const em2Str  = somaData(hoje, 2)
 
-  // Inclui role para diferenciar admin de membro
   const { data: tarefas } = await supabase
     .from('tasks')
     .select(`
       task_id, title, due_date, status,
-      assignee:members!tasks_assignee_id_fkey(id, name, whatsapp, role)
+      assignee:members!tasks_assignee_id_fkey(id, name, whatsapp),
+      group:groups(name)
     `)
     .eq('workspace_id', workspaceId)
     .lte('due_date', em2Str)
     .in('status', ['open', 'in_progress'])
     .not('assignee_id', 'is', null)
+    .order('due_date', { ascending: true })
 
   if (!tarefas?.length) return
 
-  type Bucket = {
-    jid: string; nome: string; role: string
-    antecipadas: typeof tarefas; hoje: typeof tarefas; atrasadas: typeof tarefas
-  }
+  type Bucket = { jid: string; nome: string; tarefas: typeof tarefas }
   const porMembro = new Map<string, Bucket>()
 
   for (const t of tarefas) {
     const assignee = Array.isArray(t.assignee) ? t.assignee[0] : t.assignee
     if (!assignee?.whatsapp) continue
-
     if (!porMembro.has(assignee.id)) {
-      porMembro.set(assignee.id, {
-        jid: toPhone(assignee.whatsapp),
-        nome: assignee.name,
-        role: assignee.role ?? 'member',
-        antecipadas: [], hoje: [], atrasadas: [],
-      })
+      porMembro.set(assignee.id, { jid: toPhone(assignee.whatsapp), nome: assignee.name, tarefas: [] })
     }
-    const entry = porMembro.get(assignee.id)!
-    const prazo = t.due_date.split('T')[0]
-
-    if (prazo > hojeStr)        entry.antecipadas.push(t)
-    else if (prazo === hojeStr) entry.hoje.push(t)
-    else                        entry.atrasadas.push(t)
+    porMembro.get(assignee.id)!.tarefas.push(t)
   }
 
-  for (const { jid, nome, role, antecipadas, hoje: vencem, atrasadas } of porMembro.values()) {
-    if (!antecipadas.length && !vencem.length && !atrasadas.length) continue
+  for (const { jid, nome, tarefas: ts } of porMembro.values()) {
+    if (!ts.length) continue
 
-    let msg: string
+    let msg = `📋 *Bom dia, ${nome}!*\n_Suas tarefas abertas:_\n\n`
 
-    if (role === 'admin') {
-      // Admin: visão completa da equipe (todas as tarefas de todos os membros)
-      msg = `📋 *Bom dia, ${nome}!* — Visão da equipe:\n`
-
-      if (atrasadas.length) {
-        msg += `\n⚠️ *Atrasadas (${atrasadas.length}):*\n`
-        for (const t of atrasadas) {
-          const a = Array.isArray(t.assignee) ? t.assignee[0] : t.assignee
-          msg += `• [${a?.name ?? '?'}] *${t.task_id}* — ${t.title} (${formatarData(t.due_date)})\n`
-        }
-      }
-      if (vencem.length) {
-        msg += `\n🔴 *Vencem hoje (${vencem.length}):*\n`
-        for (const t of vencem) {
-          const a = Array.isArray(t.assignee) ? t.assignee[0] : t.assignee
-          msg += `• [${a?.name ?? '?'}] *${t.task_id}* — ${t.title}\n`
-        }
-      }
-      if (antecipadas.length) {
-        msg += `\n🟡 *Vencem em 2 dias (${antecipadas.length}):*\n`
-        for (const t of antecipadas) {
-          const a = Array.isArray(t.assignee) ? t.assignee[0] : t.assignee
-          msg += `• [${a?.name ?? '?'}] *${t.task_id}* — ${t.title}\n`
-        }
-      }
-      msg += `\n_Visão completa em app.tarefa.app_`
-    } else {
-      // Membro: apenas suas próprias tarefas
-      msg = `📋 *Bom dia, ${nome}!*\n`
-
-      if (vencem.length) {
-        msg += `\n🔴 *Vencem hoje (${vencem.length}):*\n`
-        for (const t of vencem) msg += `• *${t.task_id}* — ${t.title}\n`
-      }
-      if (atrasadas.length) {
-        msg += `\n⚠️ *Atrasadas (${atrasadas.length}):*\n`
-        for (const t of atrasadas) msg += `• *${t.task_id}* — ${t.title} (${formatarData(t.due_date)})\n`
-      }
-      if (antecipadas.length) {
-        msg += `\n🟡 *Vencem em 2 dias (${antecipadas.length}):*\n`
-        for (const t of antecipadas) msg += `• *${t.task_id}* — ${t.title}\n`
-      }
-      msg += `\n_Digite *listar tarefas* para ver todas._`
+    for (const t of ts) {
+      const group = Array.isArray(t.group) ? t.group[0] : t.group
+      const statusEmoji = t.status === 'in_progress' ? '🟡' : '🔵'
+      msg += `${statusEmoji} *${t.task_id}* — ${t.title}\n`
+      if (group?.name) msg += `   👥 ${group.name}\n`
+      msg += `   ${formatarPrazo(t.due_date)}\n\n`
     }
+
+    msg += `_${ts.length} tarefa${ts.length !== 1 ? 's' : ''} — app.tarefa.app_`
 
     try {
       await sendText(jid, msg)
-      console.log(`[cron] Lembrete manhã enviado para ${nome} (${role})`)
+      console.log(`[cron] Lembrete manhã enviado para ${nome}`)
     } catch (err) {
       console.error(`[cron] Erro ao enviar para ${nome}:`, err)
     }
   }
 }
 
+// ─── Relatório de equipe — exclusivo para Admin + Grupo da empresa ────────────
+// Enviado após o lembrete pessoal matinal. Mostra visão completa da equipe.
+// Tarefas atrasadas incluem o nome do responsável.
+
+async function enviarRelatorioEquipe(workspaceId: string) {
+  console.log(`[cron] Relatório equipe — workspace ${workspaceId}`)
+
+  const hoje    = new Date()
+  const hojeStr = somaData(hoje, 0)
+  const em2Str  = somaData(hoje, 2)
+
+  const { data: tarefas } = await supabase
+    .from('tasks')
+    .select(`
+      task_id, title, due_date, status,
+      assignee:members!tasks_assignee_id_fkey(name)
+    `)
+    .eq('workspace_id', workspaceId)
+    .lte('due_date', em2Str)
+    .in('status', ['open', 'in_progress'])
+    .order('due_date', { ascending: true })
+
+  if (!tarefas?.length) return
+
+  const atrasadas   = tarefas.filter(t => t.due_date.split('T')[0] < hojeStr)
+  const ventemHoje  = tarefas.filter(t => t.due_date.split('T')[0] === hojeStr)
+  const em2Dias     = tarefas.filter(t => t.due_date.split('T')[0] > hojeStr)
+
+  const dataHoje = new Date().toLocaleDateString('pt-BR')
+  let msg = `📊 *Visão da Equipe — ${dataHoje}*\n`
+
+  if (atrasadas.length) {
+    msg += `\n⚠️ *Atrasadas (${atrasadas.length}):*\n`
+    for (const t of atrasadas) {
+      const a = Array.isArray(t.assignee) ? t.assignee[0] : t.assignee
+      msg += `• 👤 ${a?.name ?? '?'} — *${t.task_id}* — ${t.title} (${formatarData(t.due_date)})\n`
+    }
+  }
+  if (ventemHoje.length) {
+    msg += `\n🔴 *Vencem hoje (${ventemHoje.length}):*\n`
+    for (const t of ventemHoje) {
+      const a = Array.isArray(t.assignee) ? t.assignee[0] : t.assignee
+      msg += `• 👤 ${a?.name ?? '?'} — *${t.task_id}* — ${t.title}\n`
+    }
+  }
+  if (em2Dias.length) {
+    msg += `\n🟡 *Vencem em 2 dias (${em2Dias.length}):*\n`
+    for (const t of em2Dias) {
+      const a = Array.isArray(t.assignee) ? t.assignee[0] : t.assignee
+      msg += `• 👤 ${a?.name ?? '?'} — *${t.task_id}* — ${t.title}\n`
+    }
+  }
+
+  msg += `\n_Visão completa em app.tarefa.app_`
+
+  // Envia para admins (privado)
+  const { data: admins } = await supabase
+    .from('members').select('name, whatsapp')
+    .eq('workspace_id', workspaceId).eq('role', 'admin')
+    .eq('status', 'active').not('whatsapp', 'is', null)
+
+  for (const admin of admins ?? []) {
+    try {
+      await sendText(toPhone(admin.whatsapp), msg)
+      console.log(`[cron] Relatório equipe enviado para admin ${admin.name}`)
+    } catch (err) {
+      console.error(`[cron] Erro relatório equipe admin ${admin.name}:`, err)
+    }
+  }
+
+  // Envia para grupos da empresa vinculados ao WhatsApp
+  const { data: grupos } = await supabase
+    .from('groups').select('name, whatsapp_group')
+    .eq('workspace_id', workspaceId)
+    .not('whatsapp_group', 'is', null)
+
+  for (const grupo of grupos ?? []) {
+    try {
+      await sendText(grupo.whatsapp_group, msg)
+      console.log(`[cron] Relatório equipe enviado para grupo ${grupo.name}`)
+    } catch (err) {
+      console.error(`[cron] Erro relatório equipe grupo ${grupo.name}:`, err)
+    }
+  }
+}
+
 // ─── Resumo noturno ───────────────────────────────────────────────────────────
-// Membros recebem apenas seu próprio resumo.
-// Admins recebem resumo completo da equipe (todos os membros).
+// Todos os membros (incluindo admin) recebem apenas seu próprio resumo.
+// Formato igual ao listarTarefas do agent.
 
 async function enviarResumoConcluidos(workspaceId: string) {
   console.log(`[cron] Resumo noturno — workspace ${workspaceId}`)
@@ -245,87 +297,54 @@ async function enviarResumoConcluidos(workspaceId: string) {
 
   const { data: membros } = await supabase
     .from('members')
-    .select('id, name, whatsapp, role')
+    .select('id, name, whatsapp')
     .eq('workspace_id', workspaceId)
     .eq('status', 'active')
     .not('whatsapp', 'is', null)
 
   if (!membros?.length) return
 
-  // Busca dados de todos os membros de uma vez para o relatório do admin
-  const todosIds = membros.map(m => m.id)
-  const [{ data: todasConcluidas }, { data: todasAbertas }] = await Promise.all([
-    supabase.from('tasks').select('task_id, title, assignee_id')
-      .eq('workspace_id', workspaceId)
-      .eq('status', 'done')
-      .in('assignee_id', todosIds)
-      .gte('updated_at', hojeStr).lt('updated_at', amanhaStr),
-    supabase.from('tasks').select('task_id, title, due_date, assignee_id')
-      .eq('workspace_id', workspaceId)
-      .in('status', ['open', 'in_progress'])
-      .in('assignee_id', todosIds)
-      .order('due_date', { ascending: true, nullsFirst: false }),
-  ])
-
   for (const membro of membros) {
-    let msg: string
+    const [{ data: concluidas }, { data: abertas }] = await Promise.all([
+      supabase.from('tasks').select('task_id, title')
+        .eq('workspace_id', workspaceId).eq('assignee_id', membro.id)
+        .eq('status', 'done').gte('updated_at', hojeStr).lt('updated_at', amanhaStr),
+      supabase.from('tasks')
+        .select('task_id, title, due_date, status, group:groups(name)')
+        .eq('workspace_id', workspaceId).eq('assignee_id', membro.id)
+        .in('status', ['open', 'in_progress'])
+        .order('due_date', { ascending: true, nullsFirst: false }).limit(5),
+    ])
 
-    if (membro.role === 'admin') {
-      // Admin: resumo completo de toda a equipe
-      msg = `🌙 *Boa noite, ${membro.name}!* — Resumo da equipe:\n`
+    if (!concluidas?.length && !abertas?.length) continue
 
-      const totalConcluidas = todasConcluidas?.length ?? 0
-      const totalAbertas    = todasAbertas?.length ?? 0
+    let msg = `🌙 *Boa noite, ${membro.name}!*\n_Resumo do seu dia:_\n\n`
 
-      msg += `\n✅ *Concluídas hoje: ${totalConcluidas}*\n`
-      for (const m of membros) {
-        const qt = todasConcluidas?.filter(t => t.assignee_id === m.id).length ?? 0
-        if (qt > 0) msg += `• ${m.name}: ${qt} tarefa${qt > 1 ? 's' : ''}\n`
-      }
-
-      const semConclusao = membros.filter(m =>
-        !(todasConcluidas?.some(t => t.assignee_id === m.id))
-      )
-      if (semConclusao.length) {
-        msg += `\n⚡ *Sem conclusão hoje:*\n`
-        for (const m of semConclusao) {
-          const abertas = todasAbertas?.filter(t => t.assignee_id === m.id).length ?? 0
-          if (abertas > 0) msg += `• ${m.name} (${abertas} em aberto)\n`
-        }
-      }
-
-      msg += `\n📂 *Total em aberto na equipe: ${totalAbertas}*`
-      msg += `\n\n_Visão completa em app.tarefa.app_`
+    if (concluidas?.length) {
+      msg += `✅ *Concluídas hoje (${concluidas.length}):*\n`
+      for (const t of concluidas) msg += `• *${t.task_id}* — ${t.title}\n`
+      msg += '\n'
     } else {
-      // Membro: apenas seu próprio resumo
-      const concluidas = todasConcluidas?.filter(t => t.assignee_id === membro.id) ?? []
-      const abertas    = todasAbertas?.filter(t => t.assignee_id === membro.id).slice(0, 5) ?? []
-
-      if (!concluidas.length && !abertas.length) continue
-
-      msg = `🌙 *Boa noite, ${membro.name}!*\n_Resumo do seu dia:_\n`
-
-      if (concluidas.length) {
-        msg += `\n✅ *Concluídas hoje (${concluidas.length}):*\n`
-        for (const t of concluidas) msg += `• *${t.task_id}* — ${t.title}\n`
-      } else {
-        msg += `\n_Nenhuma tarefa concluída hoje._\n`
-      }
-
-      if (abertas.length) {
-        msg += `\n📋 *Ainda em aberto:*\n`
-        for (const t of abertas) {
-          const prazo = t.due_date ? ` — ${formatarData(t.due_date)}` : ''
-          msg += `• *${t.task_id}* — ${t.title}${prazo}\n`
-        }
-      }
-
-      msg += `\n_Até amanhã! 💪_`
+      msg += `_Nenhuma tarefa concluída hoje._\n\n`
     }
+
+    if (abertas?.length) {
+      msg += `📋 *Ainda em aberto (${abertas.length}):*\n\n`
+      for (const t of abertas) {
+        const group = Array.isArray(t.group) ? t.group[0] : t.group
+        const statusEmoji = t.status === 'in_progress' ? '🟡' : '🔵'
+        msg += `${statusEmoji} *${t.task_id}* — ${t.title}\n`
+        if (group?.name) msg += `   👥 ${group.name}\n`
+        if (t.due_date)  msg += `   ${formatarPrazo(t.due_date)}\n`
+        msg += '\n'
+      }
+    }
+
+    msg += `_Até amanhã! 💪_`
 
     try {
       await sendText(toPhone(membro.whatsapp), msg)
-      console.log(`[cron] Resumo noturno enviado para ${membro.name} (${membro.role})`)
+      console.log(`[cron] Resumo noturno enviado para ${membro.name}`)
     } catch (err) {
       console.error(`[cron] Erro no resumo noturno para ${membro.name}:`, err)
     }
