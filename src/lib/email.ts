@@ -35,17 +35,8 @@ export async function sendInviteEmail({
 
           <!-- Header -->
           <tr>
-            <td style="background:#128c7e;padding:28px 40px;">
-              <table cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="background:rgba(255,255,255,.15);border-radius:8px;width:32px;height:32px;text-align:center;vertical-align:middle;">
-                    <span style="color:#fff;font-weight:700;font-size:15px;">T</span>
-                  </td>
-                  <td style="padding-left:10px;">
-                    <span style="color:#fff;font-weight:700;font-size:18px;">TarefaApp</span>
-                  </td>
-                </tr>
-              </table>
+            <td style="background:#128c7e;padding:20px 32px;text-align:center;">
+              <img src="https://app.tarefa.app/logo.png" alt="TarefaApp" width="180" style="display:block;margin:0 auto;height:auto;" />
             </td>
           </tr>
 

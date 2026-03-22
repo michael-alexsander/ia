@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { CheckSquare, Users, FolderOpen, Settings, LogOut } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
@@ -26,13 +27,15 @@ export function Sidebar() {
   return (
     <aside className="w-56 min-h-screen bg-white border-r border-[#e5e7eb] flex flex-col">
       {/* Logo */}
-      <div className="px-5 py-5 border-b border-[#e5e7eb]">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-[#128c7e] flex items-center justify-center">
-            <span className="text-white font-bold text-xs">T</span>
-          </div>
-          <span className="font-bold text-[#128c7e]">TarefaApp</span>
-        </div>
+      <div className="bg-[#128c7e] px-4 py-3">
+        <Image
+          src="/logo.png"
+          alt="TarefaApp"
+          width={160}
+          height={40}
+          className="w-full h-auto object-contain"
+          priority
+        />
       </div>
 
       {/* Nav */}

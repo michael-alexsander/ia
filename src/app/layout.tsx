@@ -7,6 +7,11 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata: Metadata = {
   title: 'TarefaApp — Gestor de Tarefas AI',
   description: 'Gerencie tarefas e equipes via WhatsApp com inteligência artificial',
+  icons: {
+    icon: '/favicon.png',
+    shortcut: '/favicon.png',
+    apple: '/favicon.png',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

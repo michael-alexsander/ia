@@ -95,21 +95,51 @@ function buildFilterParts(
   return parts
 }
 
-function generateAndDownloadPDF(tasks: Task[], filterParts: string[]): { filename: string; base64: string } {
+async function loadImageBase64(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+      canvas.getContext('2d')!.drawImage(img, 0, 0)
+      resolve(canvas.toDataURL('image/png'))
+    }
+    img.onerror = reject
+    img.src = url
+  })
+}
+
+async function generateAndDownloadPDF(tasks: Task[], filterParts: string[]): Promise<{ filename: string; base64: string }> {
   const doc = new jsPDF()
 
+  // Tenta carregar o logo; em caso de erro usa apenas texto
+  let logoDataUrl: string | null = null
+  try { logoDataUrl = await loadImageBase64('/logo.png') } catch { /* sem logo */ }
+
   // Header band
+  const headerH = logoDataUrl ? 32 : 26
   doc.setFillColor(18, 140, 126)
-  doc.rect(0, 0, 210, 26, 'F')
+  doc.rect(0, 0, 210, headerH, 'F')
 
-  doc.setTextColor(255, 255, 255)
-  doc.setFont('helvetica', 'bold')
-  doc.setFontSize(15)
-  doc.text('Relatório de Tarefas', 14, 13)
-
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(8.5)
-  doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, 14, 21)
+  if (logoDataUrl) {
+    // Logo à esquerda (proporcional: logo é ~4:1 largura/altura)
+    doc.addImage(logoDataUrl, 'PNG', 14, 6, 56, 14)
+    // Data à direita
+    doc.setTextColor(255, 255, 255)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, 196, 28, { align: 'right' })
+  } else {
+    doc.setTextColor(255, 255, 255)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(15)
+    doc.text('Relatório de Tarefas', 14, 13)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8.5)
+    doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, 14, 21)
+  }
 
   let startY = 34
 
@@ -202,8 +232,7 @@ export function TaskList({ initialTasks, members, groups }: {
 
   function handleGenerateReport() {
     const filterParts = buildFilterParts(search, statusFilter, groupFilter, groups, dateFrom, dateTo)
-    const result = generateAndDownloadPDF(filtered, filterParts)
-    setReportFile(result)
+    generateAndDownloadPDF(filtered, filterParts).then(result => setReportFile(result))
   }
 
   return (
