@@ -123,19 +123,22 @@ async function verificarLembretesTask() {
 }
 
 // ─── Lembrete diário manhã ────────────────────────────────────────────────────
+// Membros recebem apenas suas próprias tarefas.
+// Admins recebem visão completa da equipe (todas as tarefas de todos os membros).
 
 async function enviarLembretesPrazo(workspaceId: string) {
   console.log(`[cron] Lembretes manhã — workspace ${workspaceId}`)
 
-  const hoje   = new Date()
+  const hoje    = new Date()
   const hojeStr = somaData(hoje, 0)
   const em2Str  = somaData(hoje, 2)
 
+  // Inclui role para diferenciar admin de membro
   const { data: tarefas } = await supabase
     .from('tasks')
     .select(`
       task_id, title, due_date, status,
-      assignee:members!tasks_assignee_id_fkey(id, name, whatsapp)
+      assignee:members!tasks_assignee_id_fkey(id, name, whatsapp, role)
     `)
     .eq('workspace_id', workspaceId)
     .lte('due_date', em2Str)
@@ -144,7 +147,10 @@ async function enviarLembretesPrazo(workspaceId: string) {
 
   if (!tarefas?.length) return
 
-  type Bucket = { jid: string; nome: string; antecipadas: typeof tarefas; hoje: typeof tarefas; atrasadas: typeof tarefas }
+  type Bucket = {
+    jid: string; nome: string; role: string
+    antecipadas: typeof tarefas; hoje: typeof tarefas; atrasadas: typeof tarefas
+  }
   const porMembro = new Map<string, Bucket>()
 
   for (const t of tarefas) {
@@ -152,39 +158,74 @@ async function enviarLembretesPrazo(workspaceId: string) {
     if (!assignee?.whatsapp) continue
 
     if (!porMembro.has(assignee.id)) {
-      porMembro.set(assignee.id, { jid: toPhone(assignee.whatsapp), nome: assignee.name, antecipadas: [], hoje: [], atrasadas: [] })
+      porMembro.set(assignee.id, {
+        jid: toPhone(assignee.whatsapp),
+        nome: assignee.name,
+        role: assignee.role ?? 'member',
+        antecipadas: [], hoje: [], atrasadas: [],
+      })
     }
     const entry = porMembro.get(assignee.id)!
     const prazo = t.due_date.split('T')[0]
 
-    if (prazo > hojeStr)       entry.antecipadas.push(t)
+    if (prazo > hojeStr)        entry.antecipadas.push(t)
     else if (prazo === hojeStr) entry.hoje.push(t)
     else                        entry.atrasadas.push(t)
   }
 
-  for (const { jid, nome, antecipadas, hoje: vencem, atrasadas } of porMembro.values()) {
+  for (const { jid, nome, role, antecipadas, hoje: vencem, atrasadas } of porMembro.values()) {
     if (!antecipadas.length && !vencem.length && !atrasadas.length) continue
 
-    let msg = `📋 *Bom dia, ${nome}!*\n`
+    let msg: string
 
-    if (vencem.length) {
-      msg += `\n🔴 *Vencem hoje (${vencem.length}):*\n`
-      for (const t of vencem) msg += `• *${t.task_id}* — ${t.title}\n`
-    }
-    if (atrasadas.length) {
-      msg += `\n⚠️ *Atrasadas (${atrasadas.length}):*\n`
-      for (const t of atrasadas) msg += `• *${t.task_id}* — ${t.title} (${formatarData(t.due_date)})\n`
-    }
-    if (antecipadas.length) {
-      msg += `\n🟡 *Vencem em 2 dias (${antecipadas.length}):*\n`
-      for (const t of antecipadas) msg += `• *${t.task_id}* — ${t.title}\n`
-    }
+    if (role === 'admin') {
+      // Admin: visão completa da equipe (todas as tarefas de todos os membros)
+      msg = `📋 *Bom dia, ${nome}!* — Visão da equipe:\n`
 
-    msg += `\n_Digite *listar tarefas* para ver todas._`
+      if (atrasadas.length) {
+        msg += `\n⚠️ *Atrasadas (${atrasadas.length}):*\n`
+        for (const t of atrasadas) {
+          const a = Array.isArray(t.assignee) ? t.assignee[0] : t.assignee
+          msg += `• [${a?.name ?? '?'}] *${t.task_id}* — ${t.title} (${formatarData(t.due_date)})\n`
+        }
+      }
+      if (vencem.length) {
+        msg += `\n🔴 *Vencem hoje (${vencem.length}):*\n`
+        for (const t of vencem) {
+          const a = Array.isArray(t.assignee) ? t.assignee[0] : t.assignee
+          msg += `• [${a?.name ?? '?'}] *${t.task_id}* — ${t.title}\n`
+        }
+      }
+      if (antecipadas.length) {
+        msg += `\n🟡 *Vencem em 2 dias (${antecipadas.length}):*\n`
+        for (const t of antecipadas) {
+          const a = Array.isArray(t.assignee) ? t.assignee[0] : t.assignee
+          msg += `• [${a?.name ?? '?'}] *${t.task_id}* — ${t.title}\n`
+        }
+      }
+      msg += `\n_Visão completa em app.tarefa.app_`
+    } else {
+      // Membro: apenas suas próprias tarefas
+      msg = `📋 *Bom dia, ${nome}!*\n`
+
+      if (vencem.length) {
+        msg += `\n🔴 *Vencem hoje (${vencem.length}):*\n`
+        for (const t of vencem) msg += `• *${t.task_id}* — ${t.title}\n`
+      }
+      if (atrasadas.length) {
+        msg += `\n⚠️ *Atrasadas (${atrasadas.length}):*\n`
+        for (const t of atrasadas) msg += `• *${t.task_id}* — ${t.title} (${formatarData(t.due_date)})\n`
+      }
+      if (antecipadas.length) {
+        msg += `\n🟡 *Vencem em 2 dias (${antecipadas.length}):*\n`
+        for (const t of antecipadas) msg += `• *${t.task_id}* — ${t.title}\n`
+      }
+      msg += `\n_Digite *listar tarefas* para ver todas._`
+    }
 
     try {
       await sendText(jid, msg)
-      console.log(`[cron] Lembrete manhã enviado para ${nome}`)
+      console.log(`[cron] Lembrete manhã enviado para ${nome} (${role})`)
     } catch (err) {
       console.error(`[cron] Erro ao enviar para ${nome}:`, err)
     }
@@ -192,6 +233,8 @@ async function enviarLembretesPrazo(workspaceId: string) {
 }
 
 // ─── Resumo noturno ───────────────────────────────────────────────────────────
+// Membros recebem apenas seu próprio resumo.
+// Admins recebem resumo completo da equipe (todos os membros).
 
 async function enviarResumoConcluidos(workspaceId: string) {
   console.log(`[cron] Resumo noturno — workspace ${workspaceId}`)
@@ -202,48 +245,87 @@ async function enviarResumoConcluidos(workspaceId: string) {
 
   const { data: membros } = await supabase
     .from('members')
-    .select('id, name, whatsapp')
+    .select('id, name, whatsapp, role')
     .eq('workspace_id', workspaceId)
     .eq('status', 'active')
     .not('whatsapp', 'is', null)
 
   if (!membros?.length) return
 
+  // Busca dados de todos os membros de uma vez para o relatório do admin
+  const todosIds = membros.map(m => m.id)
+  const [{ data: todasConcluidas }, { data: todasAbertas }] = await Promise.all([
+    supabase.from('tasks').select('task_id, title, assignee_id')
+      .eq('workspace_id', workspaceId)
+      .eq('status', 'done')
+      .in('assignee_id', todosIds)
+      .gte('updated_at', hojeStr).lt('updated_at', amanhaStr),
+    supabase.from('tasks').select('task_id, title, due_date, assignee_id')
+      .eq('workspace_id', workspaceId)
+      .in('status', ['open', 'in_progress'])
+      .in('assignee_id', todosIds)
+      .order('due_date', { ascending: true, nullsFirst: false }),
+  ])
+
   for (const membro of membros) {
-    const [{ data: concluidas }, { data: abertas }] = await Promise.all([
-      supabase.from('tasks').select('task_id, title')
-        .eq('workspace_id', workspaceId).eq('assignee_id', membro.id)
-        .eq('status', 'done').gte('updated_at', hojeStr).lt('updated_at', amanhaStr),
-      supabase.from('tasks').select('task_id, title, due_date')
-        .eq('workspace_id', workspaceId).eq('assignee_id', membro.id)
-        .in('status', ['open', 'in_progress'])
-        .order('due_date', { ascending: true, nullsFirst: false }).limit(5),
-    ])
+    let msg: string
 
-    if (!concluidas?.length && !abertas?.length) continue
+    if (membro.role === 'admin') {
+      // Admin: resumo completo de toda a equipe
+      msg = `🌙 *Boa noite, ${membro.name}!* — Resumo da equipe:\n`
 
-    let msg = `🌙 *Boa noite, ${membro.name}!*\n_Resumo do seu dia:_\n`
+      const totalConcluidas = todasConcluidas?.length ?? 0
+      const totalAbertas    = todasAbertas?.length ?? 0
 
-    if (concluidas?.length) {
-      msg += `\n✅ *Concluídas hoje (${concluidas.length}):*\n`
-      for (const t of concluidas) msg += `• *${t.task_id}* — ${t.title}\n`
-    } else {
-      msg += `\n_Nenhuma tarefa concluída hoje._\n`
-    }
-
-    if (abertas?.length) {
-      msg += `\n📋 *Ainda em aberto:*\n`
-      for (const t of abertas) {
-        const prazo = t.due_date ? ` — ${formatarData(t.due_date)}` : ''
-        msg += `• *${t.task_id}* — ${t.title}${prazo}\n`
+      msg += `\n✅ *Concluídas hoje: ${totalConcluidas}*\n`
+      for (const m of membros) {
+        const qt = todasConcluidas?.filter(t => t.assignee_id === m.id).length ?? 0
+        if (qt > 0) msg += `• ${m.name}: ${qt} tarefa${qt > 1 ? 's' : ''}\n`
       }
-    }
 
-    msg += `\n_Até amanhã! 💪_`
+      const semConclusao = membros.filter(m =>
+        !(todasConcluidas?.some(t => t.assignee_id === m.id))
+      )
+      if (semConclusao.length) {
+        msg += `\n⚡ *Sem conclusão hoje:*\n`
+        for (const m of semConclusao) {
+          const abertas = todasAbertas?.filter(t => t.assignee_id === m.id).length ?? 0
+          if (abertas > 0) msg += `• ${m.name} (${abertas} em aberto)\n`
+        }
+      }
+
+      msg += `\n📂 *Total em aberto na equipe: ${totalAbertas}*`
+      msg += `\n\n_Visão completa em app.tarefa.app_`
+    } else {
+      // Membro: apenas seu próprio resumo
+      const concluidas = todasConcluidas?.filter(t => t.assignee_id === membro.id) ?? []
+      const abertas    = todasAbertas?.filter(t => t.assignee_id === membro.id).slice(0, 5) ?? []
+
+      if (!concluidas.length && !abertas.length) continue
+
+      msg = `🌙 *Boa noite, ${membro.name}!*\n_Resumo do seu dia:_\n`
+
+      if (concluidas.length) {
+        msg += `\n✅ *Concluídas hoje (${concluidas.length}):*\n`
+        for (const t of concluidas) msg += `• *${t.task_id}* — ${t.title}\n`
+      } else {
+        msg += `\n_Nenhuma tarefa concluída hoje._\n`
+      }
+
+      if (abertas.length) {
+        msg += `\n📋 *Ainda em aberto:*\n`
+        for (const t of abertas) {
+          const prazo = t.due_date ? ` — ${formatarData(t.due_date)}` : ''
+          msg += `• *${t.task_id}* — ${t.title}${prazo}\n`
+        }
+      }
+
+      msg += `\n_Até amanhã! 💪_`
+    }
 
     try {
       await sendText(toPhone(membro.whatsapp), msg)
-      console.log(`[cron] Resumo noturno enviado para ${membro.name}`)
+      console.log(`[cron] Resumo noturno enviado para ${membro.name} (${membro.role})`)
     } catch (err) {
       console.error(`[cron] Erro no resumo noturno para ${membro.name}:`, err)
     }
