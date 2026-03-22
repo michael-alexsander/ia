@@ -26,6 +26,11 @@ function formatarData(iso: string): string {
   return new Date(iso.split('T')[0] + 'T12:00:00').toLocaleDateString('pt-BR')
 }
 
+// Remove '+' e retorna só dígitos — formato que a Evolution API espera
+function toPhone(w: string): string {
+  return w.replace(/\D/g, '')
+}
+
 // ─── Dispatcher horário ───────────────────────────────────────────────────────
 // Roda a cada hora e verifica por workspace qual job deve disparar
 
@@ -85,7 +90,7 @@ async function verificarLembretesTask() {
       .from('tasks')
       .select(`
         id, task_id, title, due_date, due_time,
-        assignee:members!tasks_assignee_id_fkey(name, whatsapp_jid)
+        assignee:members!tasks_assignee_id_fkey(name, whatsapp)
       `)
       .eq('workspace_id', cfg.workspace_id)
       .eq('due_date', dataAlvo)
@@ -97,7 +102,7 @@ async function verificarLembretesTask() {
 
     for (const t of tarefas ?? []) {
       const assignee = Array.isArray(t.assignee) ? t.assignee[0] : t.assignee
-      if (!assignee?.whatsapp_jid) continue
+      if (!assignee?.whatsapp) continue
 
       const horaMarcada = (t.due_time as string).slice(0, 5)
       const msg =
@@ -107,7 +112,7 @@ async function verificarLembretesTask() {
         `_Conclua a tempo!_`
 
       try {
-        await sendText(assignee.whatsapp_jid, msg)
+        await sendText(toPhone(assignee.whatsapp), msg)
         await supabase.from('tasks').update({ reminded_at: new Date().toISOString() }).eq('id', t.id)
         console.log(`[cron] Lembrete enviado: ${t.task_id} → ${assignee.name}`)
       } catch (err) {
@@ -130,7 +135,7 @@ async function enviarLembretesPrazo(workspaceId: string) {
     .from('tasks')
     .select(`
       task_id, title, due_date, status,
-      assignee:members!tasks_assignee_id_fkey(id, name, whatsapp_jid)
+      assignee:members!tasks_assignee_id_fkey(id, name, whatsapp)
     `)
     .eq('workspace_id', workspaceId)
     .lte('due_date', em2Str)
@@ -144,10 +149,10 @@ async function enviarLembretesPrazo(workspaceId: string) {
 
   for (const t of tarefas) {
     const assignee = Array.isArray(t.assignee) ? t.assignee[0] : t.assignee
-    if (!assignee?.whatsapp_jid) continue
+    if (!assignee?.whatsapp) continue
 
     if (!porMembro.has(assignee.id)) {
-      porMembro.set(assignee.id, { jid: assignee.whatsapp_jid, nome: assignee.name, antecipadas: [], hoje: [], atrasadas: [] })
+      porMembro.set(assignee.id, { jid: toPhone(assignee.whatsapp), nome: assignee.name, antecipadas: [], hoje: [], atrasadas: [] })
     }
     const entry = porMembro.get(assignee.id)!
     const prazo = t.due_date.split('T')[0]
@@ -197,10 +202,10 @@ async function enviarResumoConcluidos(workspaceId: string) {
 
   const { data: membros } = await supabase
     .from('members')
-    .select('id, name, whatsapp_jid')
+    .select('id, name, whatsapp')
     .eq('workspace_id', workspaceId)
     .eq('status', 'active')
-    .not('whatsapp_jid', 'is', null)
+    .not('whatsapp', 'is', null)
 
   if (!membros?.length) return
 
@@ -237,7 +242,7 @@ async function enviarResumoConcluidos(workspaceId: string) {
     msg += `\n_Até amanhã! 💪_`
 
     try {
-      await sendText(membro.whatsapp_jid, msg)
+      await sendText(toPhone(membro.whatsapp), msg)
       console.log(`[cron] Resumo noturno enviado para ${membro.name}`)
     } catch (err) {
       console.error(`[cron] Erro no resumo noturno para ${membro.name}:`, err)
@@ -255,9 +260,9 @@ async function enviarRelatorioSemanal(workspaceId: string) {
   const inicioStr = somaData(hoje, -7)
 
   const { data: admins } = await supabase
-    .from('members').select('name, whatsapp_jid')
+    .from('members').select('name, whatsapp')
     .eq('workspace_id', workspaceId).eq('role', 'admin')
-    .eq('status', 'active').not('whatsapp_jid', 'is', null)
+    .eq('status', 'active').not('whatsapp', 'is', null)
 
   if (!admins?.length) return
 
@@ -295,7 +300,7 @@ async function enviarRelatorioSemanal(workspaceId: string) {
 
   for (const admin of admins) {
     try {
-      await sendText(admin.whatsapp_jid, msg)
+      await sendText(toPhone(admin.whatsapp), msg)
       console.log(`[cron] Relatório semanal enviado para ${admin.name}`)
     } catch (err) {
       console.error(`[cron] Erro no relatório semanal para ${admin.name}:`, err)
@@ -320,9 +325,9 @@ async function enviarRelatorioMensal(workspaceId: string) {
   const labelMes = `${nomesMeses[mesPrev]}/${anoPrev}`
 
   const { data: admins } = await supabase
-    .from('members').select('name, whatsapp_jid')
+    .from('members').select('name, whatsapp')
     .eq('workspace_id', workspaceId).eq('role', 'admin')
-    .eq('status', 'active').not('whatsapp_jid', 'is', null)
+    .eq('status', 'active').not('whatsapp', 'is', null)
 
   if (!admins?.length) return
 
@@ -379,7 +384,7 @@ async function enviarRelatorioMensal(workspaceId: string) {
 
   for (const admin of admins) {
     try {
-      await sendText(admin.whatsapp_jid, msg)
+      await sendText(toPhone(admin.whatsapp), msg)
       console.log(`[cron] Relatório mensal enviado para ${admin.name}`)
     } catch (err) {
       console.error(`[cron] Erro no relatório mensal para ${admin.name}:`, err)
