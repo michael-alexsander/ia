@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { Resend } from 'resend'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
-const FROM = 'TarefaApp <onboarding@resend.dev>'
+const FROM = 'TarefaApp <contato@melhoragencia.ai>'
 
 async function getWorkspaceMember() {
   const supabase = await createClient()
@@ -45,8 +45,9 @@ export async function sendReport(params: {
   const apikey   = process.env.EVOLUTION_API_KEY
   const instance = process.env.EVOLUTION_INSTANCE
 
-  let sent = 0
   const errors: string[] = []
+  // Rastreia quais membros foram enviados com sucesso (ao menos por 1 canal)
+  const sentMemberIds = new Set<string>()
 
   for (const member of members) {
     // WhatsApp
@@ -66,7 +67,7 @@ export async function sendReport(params: {
           }),
         })
         if (res.ok) {
-          sent++
+          sentMemberIds.add(member.id)
         } else {
           const body = await res.text()
           errors.push(`WPP ${member.name}: ${res.status} ${body.slice(0, 100)}`)
@@ -91,7 +92,7 @@ export async function sendReport(params: {
         if (resendError) {
           errors.push(`Email ${member.name}: ${resendError.message}`)
         } else {
-          sent++
+          sentMemberIds.add(member.id)
         }
       } catch (err) {
         errors.push(`Email ${member.name}: ${String(err).slice(0, 100)}`)
@@ -101,6 +102,7 @@ export async function sendReport(params: {
     }
   }
 
+  const sent = sentMemberIds.size
   if (sent === 0) {
     return { error: errors.length ? errors.join(' | ') : 'Falha no envio — verifique os contatos cadastrados' }
   }

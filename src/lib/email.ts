@@ -17,7 +17,7 @@ export async function sendInviteEmail({
   workspaceName?: string
   inviterName?: string
 }): Promise<void> {
-  const botPhone = '5531895077577' // número do TarefaApp no WhatsApp
+  const botPhone = '5531989507577' // número do TarefaApp no WhatsApp
   const subject = `Você foi convidado para o TarefaApp${workspaceName ? ` — ${workspaceName}` : ''}`
 
   const html = `<!DOCTYPE html>
