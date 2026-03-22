@@ -191,34 +191,46 @@ async function generateAndDownloadPDF(tasks: Task[], filterParts: string[]): Pro
 
 /* ── TaskList ────────────────────────────────────────── */
 
-export function TaskList({ initialTasks, members, groups }: {
+const PAGE_SIZE = 10
+
+export function TaskList({ initialTasks, members, groups, currentMemberId }: {
   initialTasks: Task[]
   members: Member[]
   groups: Group[]
+  currentMemberId: string | null
 }) {
-  const [search,        setSearch]        = useState('')
-  const [statusFilter,  setStatusFilter]  = useState<TaskStatus | 'all'>('all')
-  const [groupFilter,   setGroupFilter]   = useState('all')
-  const [dateFrom,      setDateFrom]      = useState('')
-  const [dateTo,        setDateTo]        = useState('')
-  const [editingTask,   setEditingTask]   = useState<Task | null>(null)
-  const [showCreate,    setShowCreate]    = useState(false)
-  const [reportFile,    setReportFile]    = useState<{ filename: string; base64: string } | null>(null)
+  const [search,          setSearch]          = useState('')
+  const [statusFilter,    setStatusFilter]    = useState<TaskStatus | 'all'>('all')
+  const [assigneeFilter,  setAssigneeFilter]  = useState(currentMemberId ?? 'all')
+  const [groupFilter,     setGroupFilter]     = useState('all')
+  const [dateFrom,        setDateFrom]        = useState('')
+  const [dateTo,          setDateTo]          = useState('')
+  const [page,            setPage]            = useState(1)
+  const [editingTask,     setEditingTask]     = useState<Task | null>(null)
+  const [showCreate,      setShowCreate]      = useState(false)
+  const [reportFile,      setReportFile]      = useState<{ filename: string; base64: string } | null>(null)
   const [isPending, startTransition] = useTransition()
 
-  const hasDateFilter = dateFrom || dateTo
-  const hasActiveFilters = search || statusFilter !== 'all' || groupFilter !== 'all' || hasDateFilter
+  const hasDateFilter    = dateFrom || dateTo
+  const hasActiveFilters = search || statusFilter !== 'all' || assigneeFilter !== 'all' || groupFilter !== 'all' || hasDateFilter
+
+  // Resetar página ao mudar qualquer filtro
+  function resetPage() { setPage(1) }
 
   const filtered = sortTasks(initialTasks.filter(task => {
-    const matchSearch =
-      task.title.toLowerCase().includes(search.toLowerCase()) ||
-      task.task_id.toLowerCase().includes(search.toLowerCase()) ||
-      (task.assignee?.name ?? '').toLowerCase().includes(search.toLowerCase())
-    const matchStatus = statusFilter === 'all' || task.status === statusFilter
-    const matchGroup  = groupFilter === 'all' || task.group?.id === groupFilter
-    const matchDate   = !hasDateFilter || isWithinRange(task.due_date, dateFrom, dateTo)
-    return matchSearch && matchStatus && matchGroup && matchDate
+    const matchSearch   = task.title.toLowerCase().includes(search.toLowerCase()) ||
+                          task.task_id.toLowerCase().includes(search.toLowerCase()) ||
+                          (task.assignee?.name ?? '').toLowerCase().includes(search.toLowerCase())
+    const matchStatus   = statusFilter   === 'all' || task.status           === statusFilter
+    const matchAssignee = assigneeFilter === 'all' || task.assignee?.id     === assigneeFilter
+    const matchGroup    = groupFilter    === 'all' || task.group?.id         === groupFilter
+    const matchDate     = !hasDateFilter || isWithinRange(task.due_date, dateFrom, dateTo)
+    return matchSearch && matchStatus && matchAssignee && matchGroup && matchDate
   }))
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const safePage   = Math.min(page, totalPages)
+  const paginated  = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
 
   function handleDelete(taskId: string) {
     if (!confirm('Excluir esta tarefa?')) return
@@ -226,8 +238,8 @@ export function TaskList({ initialTasks, members, groups }: {
   }
 
   function clearFilters() {
-    setSearch(''); setStatusFilter('all'); setGroupFilter('all')
-    setDateFrom(''); setDateTo('')
+    setSearch(''); setStatusFilter('all'); setAssigneeFilter('all')
+    setGroupFilter('all'); setDateFrom(''); setDateTo(''); resetPage()
   }
 
   function handleGenerateReport() {
@@ -237,16 +249,34 @@ export function TaskList({ initialTasks, members, groups }: {
 
   return (
     <div className="bg-white rounded-xl border border-[#e5e7eb]">
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 p-4 border-b border-[#e5e7eb] flex-wrap">
+
+      {/* Linha 1: botões de ação */}
+      <div className="flex items-center justify-end gap-2 px-4 pt-4 pb-2">
+        <button
+          onClick={handleGenerateReport}
+          disabled={filtered.length === 0}
+          className="flex items-center gap-2 border border-[#128c7e] text-[#128c7e] px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#128c7e]/5 transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <FileDown size={15} /> Relatório PDF
+        </button>
+        <button
+          onClick={() => setShowCreate(true)}
+          className="flex items-center gap-2 bg-[#128c7e] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#39a878] transition-colors shrink-0"
+        >
+          <Plus size={15} /> Nova Tarefa
+        </button>
+      </div>
+
+      {/* Linha 2: filtros */}
+      <div className="flex items-center gap-2 px-4 pb-4 border-b border-[#e5e7eb] flex-wrap">
         {/* Busca */}
-        <div className="relative min-w-[180px] flex-1">
+        <div className="relative min-w-[150px] flex-1">
           <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6b7280]" />
           <input
             type="text"
-            placeholder="ID, título ou membro..."
+            placeholder="ID ou título..."
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => { setSearch(e.target.value); resetPage() }}
             className="w-full pl-8 pr-3 py-2 text-sm border border-[#e5e7eb] rounded-lg outline-none focus:border-[#128c7e] transition-colors"
           />
         </div>
@@ -254,7 +284,7 @@ export function TaskList({ initialTasks, members, groups }: {
         {/* Status */}
         <select
           value={statusFilter}
-          onChange={e => setStatusFilter(e.target.value as TaskStatus | 'all')}
+          onChange={e => { setStatusFilter(e.target.value as TaskStatus | 'all'); resetPage() }}
           className="text-sm border border-[#e5e7eb] rounded-lg px-3 py-2 outline-none focus:border-[#128c7e] bg-white text-[#6b7280] shrink-0"
         >
           <option value="all">Todos os status</option>
@@ -263,10 +293,24 @@ export function TaskList({ initialTasks, members, groups }: {
           <option value="done">Concluída</option>
         </select>
 
+        {/* Membro */}
+        <select
+          value={assigneeFilter}
+          onChange={e => { setAssigneeFilter(e.target.value); resetPage() }}
+          className="text-sm border border-[#e5e7eb] rounded-lg px-3 py-2 outline-none focus:border-[#128c7e] bg-white text-[#6b7280] shrink-0"
+        >
+          <option value="all">Todos os membros</option>
+          {members.map(m => (
+            <option key={m.id} value={m.id}>
+              {m.id === currentMemberId ? `${m.name} (eu)` : m.name}
+            </option>
+          ))}
+        </select>
+
         {/* Grupo */}
         <select
           value={groupFilter}
-          onChange={e => setGroupFilter(e.target.value)}
+          onChange={e => { setGroupFilter(e.target.value); resetPage() }}
           className="text-sm border border-[#e5e7eb] rounded-lg px-3 py-2 outline-none focus:border-[#128c7e] bg-white text-[#6b7280] shrink-0"
         >
           <option value="all">Todos os grupos</option>
@@ -274,21 +318,22 @@ export function TaskList({ initialTasks, members, groups }: {
         </select>
 
         {/* Prazo */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-xs text-[#6b7280] whitespace-nowrap">Prazo:</span>
+        <div className="flex items-center gap-1 shrink-0">
           <input
             type="date"
             value={dateFrom}
-            onChange={e => setDateFrom(e.target.value)}
+            onChange={e => { setDateFrom(e.target.value); resetPage() }}
             className="border border-[#e5e7eb] rounded-lg px-2 py-2 text-xs outline-none focus:border-[#128c7e] transition-colors"
+            title="Prazo: de"
           />
-          <span className="text-xs text-[#6b7280]">até</span>
+          <span className="text-xs text-[#6b7280]">–</span>
           <input
             type="date"
             value={dateTo}
             min={dateFrom}
-            onChange={e => setDateTo(e.target.value)}
+            onChange={e => { setDateTo(e.target.value); resetPage() }}
             className="border border-[#e5e7eb] rounded-lg px-2 py-2 text-xs outline-none focus:border-[#128c7e] transition-colors"
+            title="Prazo: até"
           />
         </div>
 
@@ -297,23 +342,6 @@ export function TaskList({ initialTasks, members, groups }: {
             <X size={13} /> Limpar
           </button>
         )}
-
-        {/* Relatório PDF */}
-        <button
-          onClick={handleGenerateReport}
-          disabled={filtered.length === 0}
-          className="flex items-center gap-2 border border-[#128c7e] text-[#128c7e] px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#128c7e]/5 transition-colors shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <FileDown size={15} /> Relatório PDF
-        </button>
-
-        {/* Nova tarefa */}
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 bg-[#128c7e] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#39a878] transition-colors shrink-0"
-        >
-          <Plus size={15} /> Nova Tarefa
-        </button>
       </div>
 
       {/* Tabela */}
@@ -331,7 +359,7 @@ export function TaskList({ initialTasks, members, groups }: {
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
+            {paginated.length === 0 ? (
               <tr>
                 <td colSpan={7} className="text-center py-16 text-[#6b7280]">
                   {initialTasks.length === 0
@@ -340,7 +368,7 @@ export function TaskList({ initialTasks, members, groups }: {
                 </td>
               </tr>
             ) : (
-              filtered.map(task => (
+              paginated.map(task => (
                 <tr
                   key={task.id}
                   className={`border-b border-[#e5e7eb] last:border-0 transition-colors ${getRowStyle(task.due_date, task.status)}`}
@@ -397,9 +425,59 @@ export function TaskList({ initialTasks, members, groups }: {
         </table>
       </div>
 
-      <div className="px-4 py-3 border-t border-[#e5e7eb] text-xs text-[#6b7280]">
-        {filtered.length} tarefa{filtered.length !== 1 ? 's' : ''}
-        {hasActiveFilters && initialTasks.length !== filtered.length && ` (filtrado de ${initialTasks.length})`}
+      {/* Footer: contagem + paginação */}
+      <div className="px-4 py-3 border-t border-[#e5e7eb] flex items-center justify-between gap-4 flex-wrap">
+        <span className="text-xs text-[#6b7280]">
+          {filtered.length === 0 ? '0 tarefas' : (
+            <>
+              {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} de {filtered.length} tarefa{filtered.length !== 1 ? 's' : ''}
+              {hasActiveFilters && initialTasks.length !== filtered.length && ` (filtrado de ${initialTasks.length})`}
+            </>
+          )}
+        </span>
+
+        {totalPages > 1 && (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={safePage === 1}
+              className="px-2.5 py-1 text-xs border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f5f5f5] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              ‹ Anterior
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter(p => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
+              .reduce<(number | '...')[]>((acc, p, i, arr) => {
+                if (i > 0 && typeof arr[i - 1] === 'number' && (p as number) - (arr[i - 1] as number) > 1) acc.push('...')
+                acc.push(p)
+                return acc
+              }, [])
+              .map((p, i) =>
+                p === '...' ? (
+                  <span key={`ellipsis-${i}`} className="px-1 text-xs text-[#6b7280]">…</span>
+                ) : (
+                  <button
+                    key={p}
+                    onClick={() => setPage(p as number)}
+                    className={`px-2.5 py-1 text-xs border rounded-lg transition-colors ${
+                      safePage === p
+                        ? 'bg-[#128c7e] text-white border-[#128c7e]'
+                        : 'border-[#e5e7eb] text-[#6b7280] hover:bg-[#f5f5f5]'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                )
+              )}
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={safePage === totalPages}
+              className="px-2.5 py-1 text-xs border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f5f5f5] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Próxima ›
+            </button>
+          </div>
+        )}
       </div>
 
       {reportFile && (

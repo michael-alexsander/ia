@@ -32,6 +32,10 @@ async function getWorkspaceMember() {
   return member ?? null
 }
 
+export async function getCurrentMember() {
+  return getWorkspaceMember()
+}
+
 export async function getTasks() {
   const member = await getWorkspaceMember()
   if (!member) return []
