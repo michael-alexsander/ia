@@ -75,6 +75,8 @@ function isWithinRange(dateStr: string | null, from: string, to: string) {
 function buildFilterParts(
   search: string,
   statusFilter: TaskStatus | 'all',
+  assigneeFilter: string,
+  members: Member[],
   groupFilter: string,
   groups: Group[],
   dateFrom: string,
@@ -82,7 +84,11 @@ function buildFilterParts(
 ): string[] {
   const parts: string[] = []
   if (search) parts.push(`Busca: "${search}"`)
-  if (statusFilter !== 'all') parts.push(`Status: ${STATUS_LABEL[statusFilter]}`)
+  // Responsável — mais importante, aparece primeiro
+  if (assigneeFilter !== 'all') {
+    const m = members.find(m => m.id === assigneeFilter)
+    if (m) parts.push(`Responsável: ${m.name}`)
+  }
   if (groupFilter !== 'all') {
     const g = groups.find(g => g.id === groupFilter)
     if (g) parts.push(`Grupo: ${g.name}`)
@@ -92,6 +98,7 @@ function buildFilterParts(
     const to   = dateTo   ? new Date(dateTo).toLocaleDateString('pt-BR')   : '...'
     parts.push(`Prazo: ${from} até ${to}`)
   }
+  if (statusFilter !== 'all') parts.push(`Status: ${STATUS_LABEL[statusFilter]}`)
   return parts
 }
 
@@ -249,7 +256,7 @@ export function TaskList({ initialTasks, members, groups, currentMemberId }: {
   }
 
   function handleGenerateReport() {
-    const filterParts = buildFilterParts(search, statusFilter, groupFilter, groups, dateFrom, dateTo)
+    const filterParts = buildFilterParts(search, statusFilter, assigneeFilter, members, groupFilter, groups, dateFrom, dateTo)
     generateAndDownloadPDF(filtered, filterParts).then(result => setReportFile(result))
   }
 
