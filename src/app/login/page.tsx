@@ -53,7 +53,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#128c7e]">
+    <div className="min-h-screen flex items-center justify-center bg-[#f5f5f5]">
       <div className="bg-white rounded-xl shadow-lg w-full max-w-sm overflow-hidden">
 
         {/* Logo — fundo verde idêntico ao da imagem, sem borda visível */}

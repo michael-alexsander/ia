@@ -95,16 +95,18 @@ function buildFilterParts(
   return parts
 }
 
-async function loadImageBase64(url: string): Promise<string> {
+interface ImageInfo { dataUrl: string; w: number; h: number }
+
+async function loadImageBase64(url: string): Promise<ImageInfo> {
   return new Promise((resolve, reject) => {
     const img = new window.Image()
     img.crossOrigin = 'anonymous'
     img.onload = () => {
       const canvas = document.createElement('canvas')
-      canvas.width = img.naturalWidth
+      canvas.width  = img.naturalWidth
       canvas.height = img.naturalHeight
       canvas.getContext('2d')!.drawImage(img, 0, 0)
-      resolve(canvas.toDataURL('image/png'))
+      resolve({ dataUrl: canvas.toDataURL('image/png'), w: img.naturalWidth, h: img.naturalHeight })
     }
     img.onerror = reject
     img.src = url
@@ -115,39 +117,43 @@ async function generateAndDownloadPDF(tasks: Task[], filterParts: string[]): Pro
   const doc = new jsPDF()
 
   // Tenta carregar o logo; em caso de erro usa apenas texto
-  let logoDataUrl: string | null = null
-  try { logoDataUrl = await loadImageBase64('/logo.png') } catch { /* sem logo */ }
+  let logoInfo: ImageInfo | null = null
+  try { logoInfo = await loadImageBase64('/logo.png') } catch { /* sem logo */ }
 
   // Header band
-  const headerH = logoDataUrl ? 32 : 26
+  const headerH = 30
   doc.setFillColor(18, 140, 126)
   doc.rect(0, 0, 210, headerH, 'F')
 
-  if (logoDataUrl) {
-    // Logo à esquerda (proporcional: logo é ~4:1 largura/altura)
-    doc.addImage(logoDataUrl, 'PNG', 14, 6, 56, 14)
-    // Data à direita
-    doc.setTextColor(255, 255, 255)
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(8)
-    doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, 196, 28, { align: 'right' })
-  } else {
-    doc.setTextColor(255, 255, 255)
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(15)
-    doc.text('Relatório de Tarefas', 14, 13)
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(8.5)
-    doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, 14, 21)
+  // Esquerda: título + data
+  doc.setTextColor(255, 255, 255)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(14)
+  doc.text('Relatório de Tarefas', 14, 12)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(8)
+  doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, 14, 22)
+
+  // Direita: logo sem distorção, alinhada à direita
+  if (logoInfo) {
+    const maxW = 54, maxH = 20
+    const aspect = logoInfo.w / logoInfo.h
+    let lw = maxW, lh = lw / aspect
+    if (lh > maxH) { lh = maxH; lw = lh * aspect }
+    const lx = 196 - lw
+    const ly = (headerH - lh) / 2
+    doc.addImage(logoInfo.dataUrl, 'PNG', lx, ly, lw, lh)
   }
 
-  let startY = 34
+  let startY = headerH + 6
 
   if (filterParts.length > 0) {
-    doc.setTextColor(107, 114, 128)
-    doc.setFontSize(8)
+    doc.setTextColor(30, 30, 30)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10)
     doc.text(`Filtros: ${filterParts.join('  ·  ')}`, 14, startY)
-    startY += 7
+    doc.setFont('helvetica', 'normal')
+    startY += 9
   }
 
   autoTable(doc, {
