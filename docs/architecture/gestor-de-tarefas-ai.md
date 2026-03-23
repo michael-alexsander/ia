@@ -1,7 +1,7 @@
 # Arquitetura Técnica — TarefaApp (Gestor de Tarefas e Equipes AI)
 **Produto:** MelhorAgencia.ai
-**Versão:** 2.0
-**Data:** 2026-03-22
+**Versão:** 2.1
+**Data:** 2026-03-23
 
 ---
 
@@ -36,14 +36,21 @@
                                           │
                         ┌─────────────────▼──────────────────┐
                         │             VERCEL                  │
-                        │   Next.js 15 App Router             │
+                        │   Next.js 16 App Router             │
                         │   app.tarefa.app                    │
+                        └────────────────────────────────────┘
+                                          ▲
+                                          │ webhook POST
+                        ┌─────────────────┴──────────────────┐
+                        │         CELCOIN cel_payments        │
+                        │  Checkout → webhook → ativa/suspende│
                         └────────────────────────────────────┘
 ```
 
 **Serviços externos:**
 - **OpenAI gpt-4o-mini** — NLP/parser de intents
 - **Resend** — emails transacionais (sender: `contato@melhoragencia.ai`)
+- **Celcoin cel_payments** — checkout + webhooks de assinatura
 
 ---
 
@@ -56,9 +63,9 @@
 id            uuid PK DEFAULT gen_random_uuid()
 name          text NOT NULL
 slug          text UNIQUE NOT NULL
-plan          text CHECK (plan IN ('small','medium','large'))
+plan          text DEFAULT 'small' CHECK (plan IN ('small','medium','large'))
 status        text DEFAULT 'active' CHECK (status IN ('active','inactive','suspended'))
-celcoin_id    text
+celcoin_id    text    -- subscription ID da Celcoin para lookup em webhooks
 config        jsonb DEFAULT '{}'
 created_at    timestamptz DEFAULT now()
 updated_at    timestamptz DEFAULT now()
@@ -178,7 +185,7 @@ created_at      timestamptz DEFAULT now()
 │   ├── types.ts          # ParsedIntent, MsgContext, entities
 │   ├── evolution.ts      # sendText(), sendMedia() helpers
 │   ├── supabase.ts       # createClient() admin
-│   ├── cron.ts           # node-cron — relatórios + lembretes
+│   ├── cron.ts           # node-cron — relatórios + lembretes + notif. suspensão
 │   └── handlers/
 │       ├── index.ts      # tryLinkByCode, tryLinkGroup, handleIntent
 │       └── tasks.ts      # criarTarefa, listarTarefas, concluirTarefa, atualizarTarefa
@@ -195,34 +202,44 @@ created_at      timestamptz DEFAULT now()
 C:\ia\src\
 ├── app/
 │   ├── (dashboard)/
-│   │   ├── layout.tsx        # Auth check + DashboardShell
-│   │   ├── tasks/page.tsx    # Server Component → TaskList
-│   │   ├── members/page.tsx  # Server Component → MemberList
-│   │   ├── groups/page.tsx   # Server Component → GroupList
-│   │   └── settings/page.tsx # Server Component → SettingsForm
-│   ├── auth/callback/route.ts  # OAuth callback + auto-link membro por email
+│   │   ├── layout.tsx        # Auth check + DashboardShell (passa plan/status/role)
+│   │   ├── tasks/page.tsx
+│   │   ├── members/page.tsx
+│   │   ├── groups/page.tsx
+│   │   └── settings/page.tsx
+│   ├── api/
+│   │   └── webhooks/
+│   │       └── celcoin/route.ts  # POST — ativa/suspende workspace + boas-vindas
+│   ├── auth/callback/route.ts    # OAuth callback + auto-link membro por email
 │   ├── login/page.tsx
 │   └── onboarding/page.tsx
 ├── components/
 │   ├── layout/
-│   │   ├── DashboardShell.tsx  # Client — gerencia collapsed/mobileOpen
-│   │   └── Sidebar.tsx         # Client — sidebar colapsável + mobile drawer
-│   ├── tasks/TaskList.tsx       # Client — tabela + filtros + paginação + modais
-│   ├── members/MemberList.tsx   # Client — lista + convite + edição
-│   ├── groups/GroupList.tsx     # Client — grid + modal
+│   │   ├── DashboardShell.tsx  # Renderiza SuspendedOverlay se status=suspended
+│   │   └── Sidebar.tsx
+│   ├── billing/
+│   │   ├── UpgradeModal.tsx    # Modal de upgrade quando limite de plano atingido
+│   │   └── SuspendedOverlay.tsx # Overlay full-screen para workspace suspenso
+│   ├── tasks/TaskList.tsx
+│   ├── members/MemberList.tsx   # Detecta limitReached → UpgradeModal
+│   ├── groups/GroupList.tsx     # Detecta limitReached → UpgradeModal
 │   └── settings/SettingsForm.tsx
+├── proxy.ts                     # Middleware Next.js 16 (alias de middleware.ts)
+│                                # Protege rotas — libera /invite, /auth, /api/webhooks/
 └── lib/
+    ├── plans.ts         # PLAN_LIMITS, PLAN_LABELS, PLAN_PRICES, getCheckoutUrl, celcoinPlanToInternal
     ├── actions/
-    │   ├── tasks.ts     # getTasks, createTask, updateTask, deleteTask, getCurrentMember
-    │   ├── members.ts   # inviteMember, updateMember, removeMember
-    │   ├── groups.ts    # createGroup, updateGroup, deleteGroup
-    │   ├── settings.ts  # getSettings, updateSettings
-    │   └── reports.ts   # sendReport (WhatsApp + email)
-    ├── email.ts         # sendInviteEmail via Resend
+    │   ├── tasks.ts
+    │   ├── members.ts   # Verifica limite members antes de criar
+    │   ├── groups.ts    # Verifica limite groups antes de criar
+    │   ├── settings.ts
+    │   ├── reports.ts
+    │   └── billing.ts   # getBillingInfo() server action
+    ├── email.ts         # sendInviteEmail + sendWelcomeEmail via Resend
     └── supabase/
-        ├── client.ts    # browser client
-        ├── server.ts    # server client (cookies)
-        └── admin.ts     # service role client (bypass RLS)
+        ├── client.ts
+        ├── server.ts
+        └── admin.ts
 ```
 
 ---
@@ -245,15 +262,40 @@ Evolution API → POST /webhook
 ### 5.2 Convite de membro
 ```
 Admin → /members → InviteModal → inviteMember() server action
+  → Verifica limite de membros do plano → se excedido: retorna { limitReached }
   → INSERT members (status='invited') + INSERT invites (token 6-chars)
   → Evolution API sendText → WhatsApp com código
   → Resend sendInviteEmail → email com código
   → Convidado envia código no bot
-  → tryLinkByCode: UPDATE members (whatsapp_jid, status='active') + UPDATE invites (accepted=true)
+  → tryLinkByCode: UPDATE members (whatsapp_jid, status='active')
   → Convidado acessa web → auth/callback → vincula user_id por email
 ```
 
-### 5.3 Auth callback (auto-link convidado)
+### 5.3 Pagamento Celcoin → Ativação de workspace
+```
+Cliente compra plano na landing page Celcoin
+  → Celcoin: POST https://app.tarefa.app/api/webhooks/celcoin
+    body: { token, type, subscription, transaction, Customer }
+  → Verifica body.token === CELCOIN_WEBHOOK_SECRET
+  → type='subscription.addTransaction' + transaction.status='captured'
+  → findWorkspace() por celcoin_id → fallback por Customer.email
+  → SE workspace existente: UPDATE workspaces SET status='active', plan=X
+  → SE novo cliente:
+      → WhatsApp de boas-vindas para Customer.cellphone
+      → Email de boas-vindas para Customer.email (Resend)
+  → Retorna { received: true }
+```
+
+### 5.4 Suspensão de workspace
+```
+Celcoin: subscription.status = 'canceled' | 'closed'
+  → webhook: UPDATE workspaces SET status='suspended'
+  → notificarAdminsSuspenso: WhatsApp para admins com link de renovação
+  → Cron 09h BRT diário: renotifica admins de workspaces ainda suspensos
+  → DashboardShell: renderiza SuspendedOverlay (tela cheia, não contornável)
+```
+
+### 5.5 Auth callback (auto-link convidado)
 ```
 Google/email OAuth → /auth/callback?code=XXX
   → exchangeCodeForSession → user.email
@@ -267,20 +309,45 @@ Google/email OAuth → /auth/callback?code=XXX
 ## 6. Configurações de Ambiente
 
 ### VPS Digital Ocean (198.211.112.153)
-- OS: Ubuntu 22.04
-- Node.js 20, PM2
+- OS: Ubuntu 22.04, Node.js 20, PM2
 - Processo `evolution-api` (porta 8080) + `tarefaapp-agent` (porta 3001)
-- `/opt/tarefaapp/.env` — ver memory/project_melhoragencia.md para valores
+- `/opt/tarefaapp/.env`
+
+**Variáveis VPS:**
+```
+SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+OPENAI_API_KEY
+EVOLUTION_URL=http://localhost:8080
+EVOLUTION_API_KEY=429683C4C977415CAAFCCE10F7D57E11
+EVOLUTION_INSTANCE=tarefaapp
+BOT_PHONE=5531989507577
+BOT_LID=50801628172409
+CELCOIN_CHECKOUT_SMALL / MEDIUM / LARGE  (URLs de checkout)
+```
 
 ### Vercel (app.tarefa.app)
-- Next.js 15, Node.js runtime
-- Env vars configuradas via painel Vercel (não no repositório)
+- Next.js 16, Node.js runtime
 - Branch: `master` do repo `michael-alexsander/ia`
 
+**Variáveis Vercel:**
+```
+NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
+RESEND_API_KEY
+EVOLUTION_URL, EVOLUTION_API_KEY, EVOLUTION_INSTANCE
+CELCOIN_CHECKOUT_SMALL / MEDIUM / LARGE
+CELCOIN_WEBHOOK_SECRET=a9e9a42c48cb6e9ac0a2590b7a1fd126
+```
+
+### Celcoin cel_payments
+- Painel: `celcash.celcoin.com.br` → Módulos → Webservice → Configurar módulo
+- Galax ID: `37608` | Galax HASH: `Yp9vZvO7WdPzPi7962SuGfZ8MvA0XsVhBfIr9tCb`
+- URL Webhook configurada: `https://app.tarefa.app/api/webhooks/celcoin`
+- Token de segurança: enviado no `body.token` de cada request
+
 ### Resend
-- Domínio `melhoragencia.ai` verificado
+- Domínio `melhoragencia.ai` verificado (DKIM + SPF + MX — Hostinger)
 - FROM: `TarefaApp <contato@melhoragencia.ai>`
-- Registros DNS na Hostinger: DKIM (TXT), SPF (MX + TXT), MX recebimento
+- Usos: convite de membro + relatório PDF + email de boas-vindas
 
 ---
 
@@ -294,5 +361,8 @@ Google/email OAuth → /auth/callback?code=XXX
 | Hourly cron dispatcher | Permite horários configuráveis por workspace sem N crons fixos |
 | `reminded_at` no tasks | Evita lembretes duplicados em janelas de 30min |
 | `due_date` split + T12:00:00 | Evita erro de fuso UTC que mostrava dia anterior |
-| Resend `onboarding@resend.dev` → `contato@melhoragencia.ai` | Sandbox Resend só envia para conta owner; domínio verificado resolve |
+| `proxy.ts` como middleware (Next.js 16) | Next.js 16 aceita `proxy.ts` como alias de `middleware.ts`; `/api/webhooks/` excluído da proteção de auth |
+| Token webhook no body (não header) | Celcoin cel_payments envia `body.token` — não usa headers customizados |
+| Boas-vindas apenas para novos clientes | Evita spam em renovações; detectado por ausência de workspace com celcoin_id |
+| Sem trial gratuito | R$37 é barreira baixa; trial cria complexidade e ghost signups |
 | Paginação frontend (não server) | Todos os dados já carregados, filtros reativos sem round-trips |

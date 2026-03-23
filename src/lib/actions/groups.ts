@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
+import { PLAN_LIMITS, getCheckoutUrl, nextPlan, type PlanName } from '@/lib/plans'
 
 async function getWorkspaceMember() {
   const supabase = await createClient()
@@ -19,6 +20,16 @@ async function getWorkspaceMember() {
     .single()
 
   return member ?? null
+}
+
+async function getWorkspacePlan(workspaceId: string): Promise<PlanName> {
+  const admin = createAdminClient()
+  const { data } = await admin
+    .from('workspaces')
+    .select('plan')
+    .eq('id', workspaceId)
+    .single()
+  return (data?.plan ?? 'small') as PlanName
 }
 
 function generateLinkCode(): string {
@@ -65,7 +76,7 @@ export async function getWorkspaceMembersForGroup() {
   return data ?? []
 }
 
-export async function createGroup(_: unknown, formData: FormData): Promise<{ error?: string; success?: boolean }> {
+export async function createGroup(_: unknown, formData: FormData): Promise<{ error?: string; success?: boolean; limitReached?: boolean; plan?: PlanName; upgradeUrl?: string }> {
   const member = await getWorkspaceMember()
   if (!member || member.role !== 'admin') return { error: 'Sem permissão' }
 
@@ -76,6 +87,27 @@ export async function createGroup(_: unknown, formData: FormData): Promise<{ err
   if (!name) return { error: 'Nome obrigatório' }
 
   const admin = createAdminClient()
+
+  // ─── Verifica limite de grupos do plano ───────────────────────────────────
+  const plan   = await getWorkspacePlan(member.workspace_id)
+  const limits = PLAN_LIMITS[plan]
+
+  if (limits.groups !== Infinity) {
+    const { count } = await admin
+      .from('groups')
+      .select('*', { count: 'exact', head: true })
+      .eq('workspace_id', member.workspace_id)
+
+    if ((count ?? 0) >= limits.groups) {
+      const np = nextPlan(plan)
+      return {
+        error:        `Limite de grupos atingido (${limits.groups}) no plano ${plan}.`,
+        limitReached: true,
+        plan,
+        upgradeUrl:   np ? getCheckoutUrl(np) : getCheckoutUrl('large'),
+      }
+    }
+  }
 
   // Gera link_code único
   let link_code = generateLinkCode()

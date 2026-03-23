@@ -10,15 +10,48 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!user) redirect('/login')
 
   const admin = createAdminClient()
-  const { data: members } = await admin
+
+  // Busca membro + workspace em uma única query
+  const { data: member } = await admin
     .from('members')
-    .select('workspace_id, role')
+    .select('workspace_id, role, email')
     .eq('user_id', user.id)
     .eq('status', 'active')
     .limit(1)
+    .single()
 
-  const member = members?.[0] ?? null
   if (!member) redirect('/onboarding')
 
-  return <DashboardShell>{children}</DashboardShell>
+  // Busca status e plano do workspace
+  const { data: workspace } = await admin
+    .from('workspaces')
+    .select('name, plan, status')
+    .eq('id', member.workspace_id)
+    .single()
+
+  // Busca email do admin (para membros não-admin verem contato)
+  let adminEmail: string | null = null
+  if (member.role !== 'admin' && workspace?.status === 'suspended') {
+    const { data: adminMember } = await admin
+      .from('members')
+      .select('email')
+      .eq('workspace_id', member.workspace_id)
+      .eq('role', 'admin')
+      .eq('status', 'active')
+      .limit(1)
+      .single()
+    adminEmail = adminMember?.email ?? null
+  }
+
+  return (
+    <DashboardShell
+      workspaceName={workspace?.name ?? ''}
+      workspacePlan={(workspace?.plan ?? 'small') as 'small' | 'medium' | 'large'}
+      workspaceStatus={(workspace?.status ?? 'active') as 'active' | 'inactive' | 'suspended'}
+      userRole={member.role as 'admin' | 'member'}
+      adminEmail={adminEmail}
+    >
+      {children}
+    </DashboardShell>
+  )
 }

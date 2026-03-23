@@ -28,7 +28,7 @@ export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname
   const isAuthRoute    = path.startsWith('/login')
   const isOnboarding   = path.startsWith('/onboarding')
-  const isPublicRoute  = path.startsWith('/invite') || path.startsWith('/auth')
+  const isPublicRoute  = path.startsWith('/invite') || path.startsWith('/auth') || path.startsWith('/api/webhooks/')
 
   // Não autenticado → login
   if (!user && !isAuthRoute && !isPublicRoute) {

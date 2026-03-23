@@ -3,7 +3,9 @@
 import { useState, useTransition, useActionState } from 'react'
 import { UserPlus, Pencil, Trash2, Mail, Phone, X, Crown } from 'lucide-react'
 import { inviteMember, updateMember, removeMember } from '@/lib/actions/members'
+import { UpgradeModal } from '@/components/billing/UpgradeModal'
 import Image from 'next/image'
+import type { PlanName } from '@/lib/plans'
 
 type Member = {
   id: string
@@ -300,10 +302,23 @@ function EditMemberModal({ member, onClose }: { member: Member; onClose: () => v
 
 /* ── Modal de convite ─────────────────────────────── */
 
-const inviteInitial = { error: undefined as string | undefined, success: false, token: undefined as string | undefined, sentViaWhatsapp: false, sentViaEmail: false }
+type InviteState = { error?: string; success?: boolean; token?: string; sentViaWhatsapp?: boolean; sentViaEmail?: boolean; limitReached?: boolean; plan?: PlanName; upgradeUrl?: string }
+const inviteInitial: InviteState = {}
 
 function InviteModal({ onClose }: { onClose: () => void }) {
   const [state, formAction, isPending] = useActionState(inviteMember, inviteInitial)
+
+  // Mostra UpgradeModal quando limite atingido
+  if (state?.limitReached && state.plan && state.upgradeUrl) {
+    return (
+      <UpgradeModal
+        currentPlan={state.plan}
+        limitType="members"
+        upgradeUrl={state.upgradeUrl}
+        onClose={onClose}
+      />
+    )
+  }
   const [channel,    setChannel]    = useState<'email' | 'whatsapp' | 'both'>('email')
   const [copied,     setCopied]     = useState(false)
   const [wppNumber,  setWppNumber]  = useState('')

@@ -3,9 +3,27 @@
 import { useState, useEffect } from 'react'
 import { Menu } from 'lucide-react'
 import { Sidebar } from './Sidebar'
+import { SuspendedOverlay } from '@/components/billing/SuspendedOverlay'
 import Image from 'next/image'
+import type { PlanName } from '@/lib/plans'
 
-export function DashboardShell({ children }: { children: React.ReactNode }) {
+interface DashboardShellProps {
+  children: React.ReactNode
+  workspaceName: string
+  workspacePlan: PlanName
+  workspaceStatus: 'active' | 'inactive' | 'suspended'
+  userRole: 'admin' | 'member'
+  adminEmail: string | null
+}
+
+export function DashboardShell({
+  children,
+  workspaceName,
+  workspacePlan,
+  workspaceStatus,
+  userRole,
+  adminEmail,
+}: DashboardShellProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -23,6 +41,16 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen bg-[#f5f5f5]">
+      {/* Overlay de workspace suspenso */}
+      {workspaceStatus === 'suspended' && (
+        <SuspendedOverlay
+          workspaceName={workspaceName}
+          plan={workspacePlan}
+          isAdmin={userRole === 'admin'}
+          adminEmail={adminEmail ?? undefined}
+        />
+      )}
+
       {/* Mobile backdrop */}
       {mobileOpen && (
         <div

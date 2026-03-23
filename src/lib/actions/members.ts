@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { randomBytes } from 'crypto'
 import { sendInviteEmail } from '@/lib/email'
+import { PLAN_LIMITS, getCheckoutUrl, nextPlan, type PlanName } from '@/lib/plans'
 
 async function getWorkspaceMember() {
   const supabase = await createClient()
@@ -21,6 +22,16 @@ async function getWorkspaceMember() {
     .single()
 
   return member ?? null
+}
+
+async function getWorkspacePlan(workspaceId: string): Promise<PlanName> {
+  const admin = createAdminClient()
+  const { data } = await admin
+    .from('workspaces')
+    .select('plan')
+    .eq('id', workspaceId)
+    .single()
+  return (data?.plan ?? 'small') as PlanName
 }
 
 export async function getWorkspaceMembers() {
@@ -114,7 +125,7 @@ async function sendWhatsAppInvite(phone: string, name: string, code: string): Pr
 export async function inviteMember(
   _: unknown,
   formData: FormData
-): Promise<{ error?: string; success?: boolean; token?: string; sentViaWhatsapp?: boolean; sentViaEmail?: boolean }> {
+): Promise<{ error?: string; success?: boolean; token?: string; sentViaWhatsapp?: boolean; sentViaEmail?: boolean; limitReached?: boolean; plan?: PlanName; upgradeUrl?: string }> {
   const me = await getWorkspaceMember()
   if (!me || me.role !== 'admin') return { error: 'Sem permissão' }
 
@@ -127,6 +138,28 @@ export async function inviteMember(
   if (!email && !whatsapp) return { error: 'Informe e-mail ou WhatsApp' }
 
   const admin = createAdminClient()
+
+  // ─── Verifica limite de membros do plano ──────────────────────────────────
+  const plan   = await getWorkspacePlan(me.workspace_id)
+  const limits = PLAN_LIMITS[plan]
+
+  if (limits.members !== Infinity) {
+    const { count } = await admin
+      .from('members')
+      .select('*', { count: 'exact', head: true })
+      .eq('workspace_id', me.workspace_id)
+      .in('status', ['active', 'invited'])
+
+    if ((count ?? 0) >= limits.members) {
+      const np = nextPlan(plan)
+      return {
+        error:        `Limite de membros atingido (${limits.members}) no plano ${plan}.`,
+        limitReached: true,
+        plan,
+        upgradeUrl:   np ? getCheckoutUrl(np) : getCheckoutUrl('large'),
+      }
+    }
+  }
 
   // Verifica duplicata (active ou invited)
   if (email) {

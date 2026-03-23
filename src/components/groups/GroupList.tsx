@@ -3,7 +3,9 @@
 import { useState, useTransition, useActionState, useEffect } from 'react'
 import { Plus, Pencil, Trash2, X, Users, CheckCircle2, Clock, Copy } from 'lucide-react'
 import { createGroup, updateGroup, deleteGroup } from '@/lib/actions/groups'
+import { UpgradeModal } from '@/components/billing/UpgradeModal'
 import Image from 'next/image'
+import type { PlanName } from '@/lib/plans'
 
 type Member = { id: string; name: string; avatar_url: string | null }
 type Group  = {
@@ -160,7 +162,8 @@ export function GroupList({ initialGroups, allMembers }: { initialGroups: Group[
 
 /* ── Modal ─────────────────────────────────────────── */
 
-const createInitial = { error: undefined as string | undefined, success: false }
+type CreateState = { error?: string; success?: boolean; limitReached?: boolean; plan?: PlanName; upgradeUrl?: string }
+const createInitial: CreateState = {}
 
 function GroupModal({ group, allMembers, onClose }: {
   group?: Group
@@ -178,6 +181,18 @@ function GroupModal({ group, allMembers, onClose }: {
   useEffect(() => {
     if (createState?.success) onClose()
   }, [createState?.success])
+
+  // Mostra UpgradeModal quando limite atingido
+  if (createState?.limitReached && createState.plan && createState.upgradeUrl) {
+    return (
+      <UpgradeModal
+        currentPlan={createState.plan}
+        limitType="groups"
+        upgradeUrl={createState.upgradeUrl}
+        onClose={onClose}
+      />
+    )
+  }
 
   function toggleMember(id: string) {
     setSelectedIds(prev => {

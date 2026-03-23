@@ -1,8 +1,8 @@
 # PRD — Gestor de Tarefas e Equipes AI
 **Produto:** MelhorAgencia.ai
 **Agente:** TarefaApp — Gestor de Tarefas e Equipes
-**Versão:** 2.0
-**Data:** 2026-03-22
+**Versão:** 2.1
+**Data:** 2026-03-23
 **Status:** MVP em produção — https://app.tarefa.app
 
 ---
@@ -53,10 +53,11 @@ Gestores saem do WhatsApp para registrar e cobrar tarefas → perda de contexto,
 
 ## 5. Interface Web — Implementada
 
-**Stack:** Next.js 15 (App Router) + Supabase + Tailwind CSS 4 + React 19
+**Stack:** Next.js 16 (App Router) + Supabase + Tailwind CSS 4 + React 19
 **Auth:** Google OAuth · Email + Senha · Magic Link por e-mail
 **Deploy:** Vercel → app.tarefa.app
 **Layout:** Sidebar colapsável (desktop) + drawer mobile + responsivo
+**Middleware:** `src/proxy.ts` (alias Next.js 16 para `middleware.ts`) — protege rotas, libera `/api/webhooks/`
 
 ### 5.1 Páginas
 
@@ -84,14 +85,21 @@ Gestores saem do WhatsApp para registrar e cobrar tarefas → perda de contexto,
 - Convidar membro: DDI +55 fixo + número DDD+tel + email opcional
 - Envio automático: código 6-chars por WhatsApp + email (Resend)
 - Editar / Remover membros
+- Bloqueia convite quando limite do plano atingido → exibe `UpgradeModal`
 
 #### `/groups` — Grupos ✅
 - CRUD de grupos + associação de membros
 - Código `LINK-XXXXX` para vincular ao grupo do WhatsApp
+- Bloqueia criação quando limite do plano atingido → exibe `UpgradeModal`
 
 #### `/settings` — Configurações ✅
 - Horário relatório manhã / noite (por workspace)
 - `reminder_hours_before`: X horas antes do prazo para lembrete
+
+#### Workspace suspenso
+- `DashboardShell` exibe `SuspendedOverlay` (tela cheia, não contornável)
+- Admin vê preço + link de renovação
+- Membros veem contato do admin
 
 ---
 
@@ -131,17 +139,43 @@ Gestores saem do WhatsApp para registrar e cobrar tarefas → perda de contexto,
 | Semanal | Segunda 08h BRT | Produtividade da semana |
 | Mensal | Dia 1 às 08h BRT | Ranking de produtividade do mês |
 | Lembretes | A cada 30min | X horas antes do prazo (configurável) |
+| Suspensão | Diário 09h BRT | Notifica admins de workspaces suspensos |
 
 ### 6.6 Entidades extraídas pelo parser
 `responsavel`, `prazo`, `hora`, `status`, `titulo`, `task_id`, `grupo`, `descricao`, `novo_responsavel`, `novo_prazo`, `nova_hora`
 
 ---
 
-## 7. Modelo de Negócio
+## 7. Modelo de Negócio — Celcoin (Implementado)
 
-- Assinatura por agente (planos: small, medium, large)
-- Integração de pagamento: Celcoin (pendente)
-- Early adopters após 2 agentes funcionando
+### 7.1 Planos
+
+| Plano  | Preço     | Grupos | Membros | Tarefas    |
+|--------|-----------|--------|---------|------------|
+| Small  | R$37/mês  | 3      | 10      | Ilimitadas |
+| Medium | R$79/mês  | 10     | 30      | Ilimitadas |
+| Large  | R$139/mês | ∞      | ∞       | Ilimitadas |
+
+### 7.2 Checkout
+- Landing pages Celcoin: `celcash.celcoin.com.br/landingpage7350005/tarefa-app/`
+- Planos: `/comprar/plano-small/70`, `/plano-medium/71`, `/plano-large/72`
+
+### 7.3 Webhook Celcoin → TarefaApp
+- Endpoint: `POST https://app.tarefa.app/api/webhooks/celcoin`
+- Autenticação: token no body (`body.token`) verificado contra `CELCOIN_WEBHOOK_SECRET`
+- **Ativação:** `subscription.addTransaction` (captured) → workspace `active` + envia boas-vindas
+- **Suspensão:** subscription `canceled`/`closed` → workspace `suspended` + WhatsApp para admin
+- **Novo cliente:** envia email de boas-vindas (Resend) + WhatsApp de boas-vindas com próximos passos
+- Configurado em: painel Celcoin → Módulos → Webservice → Configurar módulo
+
+### 7.4 Limites de plano
+- `createGroup` e `inviteMember` verificam limite antes de criar
+- Retorna `{ limitReached: true, plan, upgradeUrl }` quando excedido
+- UI exibe `UpgradeModal` com planos superiores e links de checkout
+
+### 7.5 Workspace suspenso
+- `workspaces.status = 'suspended'` bloqueia acesso no web app via `SuspendedOverlay`
+- Cron diário 09h BRT renotifica admins de workspaces suspensos por WhatsApp
 
 ---
 
@@ -152,10 +186,10 @@ Gestores saem do WhatsApp para registrar e cobrar tarefas → perda de contexto,
 
 ## 9. Roadmap Pós-MVP
 
-- Celcoin: cobrança automática de assinaturas
 - Logo no PDF e nos emails
+- Hard delete de membro (limpar assignee_id + deletar)
+- Conectar Vercel ao GitHub para CI/CD automático
 - Notificação ao responsável quando tarefa criada para ele
 - Tarefas recorrentes (diária/semanal/mensal)
 - Sistema de pontuação + gamificação semanal
 - Google Calendar: tarefas com prazo viram eventos
-- Hard delete de membro com limpeza de referências

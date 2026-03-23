@@ -7,7 +7,9 @@ export function iniciarCronJobs() {
   cron.schedule('0 * * * *',    verificarRelatoriosHorarios, { timezone: 'UTC' })
   // Verifica lembretes de tarefa a cada 30 min
   cron.schedule('*/30 * * * *', verificarLembretesTask,      { timezone: 'UTC' })
-  console.log('[cron] Jobs agendados: relatórios (a cada hora) + lembretes de tarefa (a cada 30min)')
+  // Verifica workspaces suspensos diariamente às 09h BRT (12h UTC) para reenviar notificação
+  cron.schedule('0 12 * * *',   verificarWorkspacesSuspensos, { timezone: 'UTC' })
+  console.log('[cron] Jobs agendados: relatórios (a cada hora) + lembretes de tarefa (a cada 30min) + suspensão (diário)')
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -405,6 +407,55 @@ async function enviarRelatorioSemanal(workspaceId: string) {
       console.log(`[cron] Relatório semanal enviado para ${admin.name}`)
     } catch (err) {
       console.error(`[cron] Erro no relatório semanal para ${admin.name}:`, err)
+    }
+  }
+}
+
+// ─── Notificação de workspaces suspensos ──────────────────────────────────────
+// Roda diariamente. Envia lembrete de renovação para admins com workspace suspenso.
+
+async function verificarWorkspacesSuspensos() {
+  console.log('[cron] Verificando workspaces suspensos...')
+
+  const checkoutUrls: Record<string, string> = {
+    small:  process.env.CELCOIN_CHECKOUT_SMALL  ?? 'https://celcash.celcoin.com.br/landingpage7350005/tarefa-app/comprar/plano-small/70',
+    medium: process.env.CELCOIN_CHECKOUT_MEDIUM ?? 'https://celcash.celcoin.com.br/landingpage7350005/tarefa-app/comprar/plano-medium/70',
+    large:  process.env.CELCOIN_CHECKOUT_LARGE  ?? 'https://celcash.celcoin.com.br/landingpage7350005/tarefa-app/comprar/plano-large/70',
+  }
+
+  const { data: workspaces } = await supabase
+    .from('workspaces')
+    .select('id, name, plan')
+    .eq('status', 'suspended')
+
+  if (!workspaces?.length) return
+
+  for (const ws of workspaces) {
+    const { data: admins } = await supabase
+      .from('members')
+      .select('name, whatsapp')
+      .eq('workspace_id', ws.id)
+      .eq('role', 'admin')
+      .eq('status', 'active')
+      .not('whatsapp', 'is', null)
+
+    const plan = (ws.plan ?? 'small') as string
+    const checkoutUrl = checkoutUrls[plan] ?? checkoutUrls.small
+
+    for (const admin of admins ?? []) {
+      const msg =
+        `⚠️ *Acesso suspenso — TarefaApp*\n\n` +
+        `Olá, ${admin.name}! O acesso da empresa *${ws.name}* ainda está suspenso.\n\n` +
+        `Renove sua assinatura para reativar:\n` +
+        `👉 ${checkoutUrl}\n\n` +
+        `_Após o pagamento, o acesso é liberado automaticamente._`
+
+      try {
+        await sendText(toPhone(admin.whatsapp), msg)
+        console.log(`[cron] Lembrete de suspensão enviado para ${admin.name} (${ws.name})`)
+      } catch (err) {
+        console.error(`[cron] Erro ao notificar suspensão para ${admin.name}:`, err)
+      }
     }
   }
 }
