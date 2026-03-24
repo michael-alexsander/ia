@@ -1,7 +1,7 @@
 # PRD — ERP / CSM Admin (MelhorAgencia.ai)
 
-**Versão:** 1.0
-**Data:** 2026-03-23
+**Versão:** 1.1
+**Data:** 2026-03-24
 **Status:** Em produção (MVP)
 
 ---
@@ -21,6 +21,7 @@ O **Admin ERP/CSM** (acessível em `admin.melhoragencia.ai`) é o painel interno
 | Dificuldade em identificar clientes em risco | Dashboard com alertas de score baixo e contatos vencidos |
 | MRR e churn sem fonte única | Dashboard financeiro consolidado |
 | Onboarding não rastreado | Detecção ao vivo das 5 etapas de onboarding |
+| WhatsApp engagement não mensurável | Tabela `message_logs` alimentada pelo bot em tempo real |
 
 ---
 
@@ -48,28 +49,33 @@ O **Admin ERP/CSM** (acessível em `admin.melhoragencia.ai`) é o painel interno
 - 📋 Todos os Clientes (tabela com CHS, plano, status, ações)
 
 **Ações rápidas por cliente:**
-- "Ver ficha" → página de detalhes
+- "Ver ficha" → página de detalhes (borda rosa `rgba(235,75,113,0.3)` na seção de atenção)
 - Acesso direto ao Supabase
 
 ---
 
 ### 4.2 Ficha do Cliente (`/dashboard/customers/[id]`)
 
-**Bloco superior — CHS + Info:**
+**Layout:** grid-cols-3 — CHS gauge (col-span-1) + info card (col-span-2)
+
+**Bloco superior:**
 - Gauge do CHS (score 0–100, label crítico/atenção/saudável)
 - Nome, status, plano, slug, ID
-- Métricas: MRR, LTV, Meses ativo, Membros ativos, Tarefas (7d)
+- Métricas: MRR, LTV (MRR × meses ativo), Meses ativo, Membros ativos, Tarefas (7d)
 
 **CRM Logs (centro):**
 - Histórico cronológico de interações (anotações da equipe de CS)
-- Campos: tipo de interação, canal, anotação, autor, data do contato, próximo contato
-- Próximo contato vencido aparece em vermelho
+- Campos: tipo, canal, anotação, autor (read-only — capturado do usuário logado), data do contato (default: agora), próximo contato (opcional)
+- Próximo contato vencido aparece em 🔴 vermelho
 - Adição de novo log inline
 
+**CHS Breakdown:**
+- Barras de progresso por dimensão
+- Label da dimensão WhatsApp: `WhatsApp (x msg/7d)` — contador instantâneo real
+
 **Blocos inferiores:**
-- **CHS Breakdown:** barras de progresso por dimensão (Onboarding, Uso, Pagamento, WhatsApp, Lifetime)
-- **Dados TarefaApp:** tarefas totais, tarefas 7d, membros, grupos, último NPS
-- **Onboarding:** progresso por etapa (5/5) com datas de conclusão
+- Dados TarefaApp: tarefas totais, tarefas 7d, membros, grupos, último NPS
+- Onboarding: progresso por etapa (5/5) com datas de conclusão
 
 ---
 
@@ -80,15 +86,17 @@ O **Admin ERP/CSM** (acessível em `admin.melhoragencia.ai`) é o painel interno
 | Dimensão | Peso | Critério |
 |----------|------|----------|
 | Onboarding | 25pts | 5pts por etapa concluída (1–5) |
-| Uso Recente | 25pts | Tarefas criadas nos últimos 7d (≥10 = máx) |
+| Uso Recente | 25pts | Tarefas criadas nos últimos 7d (≥10 = máx, escala linear) |
 | Pagamento | 15pts | 15 se `status = active`, 0 caso contrário |
-| WhatsApp Engagement | 15pts | Msgs `message_logs` últimos 7d (≥5 = máx) |
-| Lifetime | 20pts | 5pts ≥1m, 10pts ≥3m, 15pts ≥7m, 20pts ≥13m |
+| WhatsApp Engagement | 15pts | ≥5 msgs/7d = 15pts · 1–4 msgs/7d = 8pts · 0 = 0pts |
+| Lifetime | 20pts | 5pts ≥1m · 10pts ≥3m · 15pts ≥7m · 20pts ≥13m |
 
 **Labels:**
 - ≤40: 🔴 crítico
 - 41–70: 🟡 atenção
 - ≥71: 🟢 saudável
+
+**Label WhatsApp na ficha:** `WhatsApp (x msg/7d)` onde x é o valor real de `message_logs` dos últimos 7 dias — atualizado a cada carregamento da página (sem cache de snapshot).
 
 **Etapas de onboarding (detecção ao vivo):**
 1. Workspace criado (sempre true)
@@ -110,8 +118,8 @@ O **Admin ERP/CSM** (acessível em `admin.melhoragencia.ai`) é o painel interno
 | type | text | reuniao, email, whatsapp, ligacao, anotacao |
 | channel | text | whatsapp, email, call, presencial |
 | note | text | Anotação livre |
-| author | text | Nome do CS responsável |
-| contact_at | timestamptz | Data/hora do contato realizado |
+| author | text | Nome do CS responsável (read-only, do usuário logado) |
+| contact_at | timestamptz | Data/hora do contato realizado (default: agora) |
 | next_contact_at | timestamptz | Próximo agendamento (opcional) |
 | created_at | timestamptz | Registro |
 

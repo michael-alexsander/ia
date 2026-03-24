@@ -1,8 +1,8 @@
 # PRD — Gestor de Tarefas e Equipes AI
 **Produto:** MelhorAgencia.ai
 **Agente:** TarefaApp — Gestor de Tarefas e Equipes
-**Versão:** 2.1
-**Data:** 2026-03-23
+**Versão:** 2.2
+**Data:** 2026-03-24
 **Status:** MVP em produção — https://app.tarefa.app
 
 ---
@@ -64,6 +64,7 @@ Gestores saem do WhatsApp para registrar e cobrar tarefas → perda de contexto,
 #### `/login`
 - Card com logo TarefaApp em header verde
 - 3 opções: Google OAuth, Email+Senha, Magic Link
+- Logo exibida com container `rgba(255,255,255,0.18)` para visibilidade sobre fundo verde
 
 #### `/onboarding`
 - Criação de workspace (empresa) no primeiro login
@@ -79,6 +80,9 @@ Gestores saem do WhatsApp para registrar e cobrar tarefas → perda de contexto,
 - Highlight visual: vermelho = vencida, amarelo = vence hoje
 - Modal criar/editar: título, descrição, responsável, grupo, prazo (data + hora)
 - Relatório PDF: jsPDF + autoTable — download local + envio WhatsApp e/ou email
+  - Logo via primitivas gráficas (quadrado verde + círculo branco)
+  - `pdfSafe()` remove emojis/surrogates para compatibilidade Helvetica
+  - Links clicáveis no rodapé (app.tarefa.app + WhatsApp)
 
 #### `/members` — Membros ✅
 - Lista: avatar, nome (ícone coroa para admin), contato, função, status
@@ -115,10 +119,16 @@ Gestores saem do WhatsApp para registrar e cobrar tarefas → perda de contexto,
 | `concluir_tarefa` | "conclui a AB123" |
 | `ajuda` | "ajuda" |
 
+**Comportamentos importantes:**
+- **Prazo automático:** ao criar tarefa sem data informada, `due_date` é preenchida automaticamente com a data de hoje. A confirmação mostra o prazo com `(hoje)` quando auto-preenchido.
+- **Responsável automático:** ao criar sem informar responsável, assume o usuário que enviou a mensagem.
+- **Filtros de listagem:** `listar tarefas do Luiz` filtra por `assignee_id` via busca por nome parcial (`ILIKE`). `listar minhas tarefas` filtra pelo próprio usuário.
+
 ### 6.2 Identificação de usuários
 - Membro identificado por `whatsapp_jid` (LID interno da Evolution API)
 - Em grupos: bot identificado por `BOT_LID` (não pelo número de telefone)
 - Privado e grupo suportados
+- Cada interação é registrada em `message_logs` para o CHS WhatsApp Engagement
 
 ### 6.3 Fluxo de ativação de membro
 1. Admin convida via web → código 6-chars enviado por WhatsApp + email
@@ -141,8 +151,12 @@ Gestores saem do WhatsApp para registrar e cobrar tarefas → perda de contexto,
 | Lembretes | A cada 30min | X horas antes do prazo (configurável) |
 | Suspensão | Diário 09h BRT | Notifica admins de workspaces suspensos |
 
+Todos os relatórios incluem link `https://api.whatsapp.com/send?phone=5531989507577&text=Quero%20criar%20tarefa%2C%20como%20funciona%3F` para facilitar criação de tarefas.
+
 ### 6.6 Entidades extraídas pelo parser
-`responsavel`, `prazo`, `hora`, `status`, `titulo`, `task_id`, `grupo`, `descricao`, `novo_responsavel`, `novo_prazo`, `nova_hora`
+`titulo`, `responsavel`, `prazo`, `hora`, `grupo`, `task_id`, `status_filtro`, `novo_titulo`, `novo_prazo`, `nova_hora`, `novo_responsavel`, `novo_status`
+
+> `responsavel` é extraído tanto para criação (define assignee) quanto para listagem (filtra por assignee).
 
 ---
 
@@ -179,17 +193,27 @@ Gestores saem do WhatsApp para registrar e cobrar tarefas → perda de contexto,
 
 ---
 
-## 8. Critério de Sucesso — 30 dias
+## 8. Links WhatsApp
+
+- **Formato padrão:** `https://api.whatsapp.com/send?phone=5531989507577&text=Quero%20criar%20tarefa%2C%20como%20funciona%3F`
+- Usado em: emails (welcome + report), PDF, caption WA, mensagem de boas-vindas Celcoin, cron reports
+- Motivo: `api.whatsapp.com/send` garante texto pré-preenchido consistente em todos os clientes (mobile, desktop, web), ao contrário de `wa.me` que pode não pré-preencher quando acessado de dentro do WhatsApp
+
+---
+
+## 9. Critério de Sucesso — 30 dias
 1.200 tarefas criadas com 12 usuários ativos
 
 ---
 
-## 9. Roadmap Pós-MVP
+## 10. Roadmap Pós-MVP
 
-- Logo no PDF e nos emails
-- Hard delete de membro (limpar assignee_id + deletar)
-- Conectar Vercel ao GitHub para CI/CD automático
-- Notificação ao responsável quando tarefa criada para ele
-- Tarefas recorrentes (diária/semanal/mensal)
-- Sistema de pontuação + gamificação semanal
-- Google Calendar: tarefas com prazo viram eventos
+| Feature | Status |
+|---|---|
+| Logo no PDF e nos emails | ✅ Feito (primitivas gráficas jsPDF) |
+| Notificação ao responsável quando tarefa criada para ele | Backlog |
+| Hard delete de membro (limpar assignee_id + deletar) | Backlog |
+| Conectar Vercel ao GitHub para CI/CD automático | Backlog |
+| Tarefas recorrentes (diária/semanal/mensal) | Backlog |
+| Sistema de pontuação + gamificação semanal | Backlog |
+| Google Calendar: tarefas com prazo viram eventos | Backlog |

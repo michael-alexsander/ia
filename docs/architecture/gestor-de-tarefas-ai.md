@@ -1,7 +1,7 @@
 # Arquitetura Técnica — TarefaApp (Gestor de Tarefas e Equipes AI)
 **Produto:** MelhorAgencia.ai
-**Versão:** 2.1
-**Data:** 2026-03-23
+**Versão:** 2.2
+**Data:** 2026-03-24
 
 ---
 
@@ -130,7 +130,7 @@ created_at      timestamptz DEFAULT now()
 updated_at      timestamptz DEFAULT now()
 ```
 
-> **due_date display:** usa `.split('T')[0] + 'T12:00:00'` para evitar problema de fuso UTC.
+> **due_date:** ao criar via bot sem informar data, preenchida automaticamente com a data de hoje (`new Date().toISOString().split('T')[0]`). Display usa `.split('T')[0] + 'T12:00:00'` para evitar problema de fuso UTC.
 
 ### `task_history`
 ```sql
@@ -172,6 +172,32 @@ expires_at      timestamptz DEFAULT now() + interval '7 days'
 created_at      timestamptz DEFAULT now()
 ```
 
+### `message_logs`
+```sql
+id           uuid PK DEFAULT gen_random_uuid()
+workspace_id uuid REFERENCES workspaces ON DELETE CASCADE
+member_id    uuid REFERENCES members ON DELETE SET NULL
+source       text NOT NULL CHECK (source IN ('private', 'group'))
+intent       text    -- intent reconhecido pelo parser (ex: criar_tarefa, ajuda)
+created_at   timestamptz DEFAULT now()
+INDEX ON message_logs(workspace_id, created_at DESC)
+```
+
+> Populada pelo bot a cada interação recebida (privado ou menção em grupo). Usada pelo admin (CHS WhatsApp Engagement) para medir engajamento real com o agente.
+
+### `crm_logs` (admin ERP/CSM)
+```sql
+id               uuid PK
+workspace_id     uuid REFERENCES workspaces ON DELETE CASCADE
+type             text    -- reuniao, email, whatsapp, ligacao, anotacao
+channel          text    -- whatsapp, email, call, presencial
+note             text
+author           text
+contact_at       timestamptz
+next_contact_at  timestamptz
+created_at       timestamptz DEFAULT now()
+```
+
 ---
 
 ## 3. Agent Server — Estrutura de Arquivos
@@ -181,14 +207,19 @@ created_at      timestamptz DEFAULT now()
 ├── src/
 │   ├── index.ts          # Express entry point, inicializa cron
 │   ├── webhook.ts        # Recebe eventos Evolution API, identifica membro, roteia
+│   │                     # Registra message_logs com async IIFE (fire-and-forget)
 │   ├── parser.ts         # NLP via gpt-4o-mini — extrai intent + entities
+│   │                     # responsavel extraído para criar E para filtrar listar
 │   ├── types.ts          # ParsedIntent, MsgContext, entities
 │   ├── evolution.ts      # sendText(), sendMedia() helpers
 │   ├── supabase.ts       # createClient() admin
 │   ├── cron.ts           # node-cron — relatórios + lembretes + notif. suspensão
+│   │                     # Todos os relatórios incluem link api.whatsapp.com/send
 │   └── handlers/
 │       ├── index.ts      # tryLinkByCode, tryLinkGroup, handleIntent
 │       └── tasks.ts      # criarTarefa, listarTarefas, concluirTarefa, atualizarTarefa
+│                         # due_date auto-preenchida com hoje se não informada
+│                         # listarTarefas: filtra por responsavel (ILIKE nome)
 ├── .env                  # variáveis de ambiente
 ├── package.json
 └── tsconfig.json
@@ -216,11 +247,11 @@ C:\ia\src\
 ├── components/
 │   ├── layout/
 │   │   ├── DashboardShell.tsx  # Renderiza SuspendedOverlay se status=suspended
-│   │   └── Sidebar.tsx
+│   │   └── Sidebar.tsx         # Versão exibida: TarefaApp v2.2
 │   ├── billing/
 │   │   ├── UpgradeModal.tsx    # Modal de upgrade quando limite de plano atingido
 │   │   └── SuspendedOverlay.tsx # Overlay full-screen para workspace suspenso
-│   ├── tasks/TaskList.tsx
+│   ├── tasks/TaskList.tsx       # PDF via jsPDF (pdfSafe, logo primitivas, links clicáveis)
 │   ├── members/MemberList.tsx   # Detecta limitReached → UpgradeModal
 │   ├── groups/GroupList.tsx     # Detecta limitReached → UpgradeModal
 │   └── settings/SettingsForm.tsx
@@ -230,12 +261,13 @@ C:\ia\src\
     ├── plans.ts         # PLAN_LIMITS, PLAN_LABELS, PLAN_PRICES, getCheckoutUrl, celcoinPlanToInternal
     ├── actions/
     │   ├── tasks.ts
-    │   ├── members.ts   # Verifica limite members antes de criar
+    │   ├── members.ts   # Verifica limite members antes de criar; WA invite com link app
     │   ├── groups.ts    # Verifica limite groups antes de criar
     │   ├── settings.ts
-    │   ├── reports.ts
+    │   ├── reports.ts   # PDF + WA caption + email com link api.whatsapp.com/send
     │   └── billing.ts   # getBillingInfo() server action
     ├── email.ts         # sendInviteEmail + sendWelcomeEmail via Resend
+    │                    # Footer com link api.whatsapp.com/send?phone=...&text=...
     └── supabase/
         ├── client.ts
         ├── server.ts
@@ -255,11 +287,35 @@ Evolution API → POST /webhook
   → Se grupo: verifica menção @bot via BOT_PHONE ou BOT_LID
   → Se LINK-XXXXX: tryLinkGroup(groupJid, code)
   → parser.ts: gpt-4o-mini → { intent, entities }
+  → message_logs INSERT (async IIFE fire-and-forget — não bloqueia resposta)
   → handlers/index.ts: handleIntent → handlers/tasks.ts
   → sendText(remoteJid, resposta)
 ```
 
-### 5.2 Convite de membro
+### 5.2 Criação de tarefa via bot
+```
+criarTarefa(ctx, entities)
+  → entities.responsavel? → busca membro por ILIKE → assignee_id
+  → else → assignee_id = ctx.memberId (usuário que enviou)
+  → entities.grupo? → busca grupo por ILIKE → group_id
+  → else if isGroup → usa whatsapp_group do grupo vinculado → group_id
+  → due_date = entities.prazo ?? new Date().toISOString().split('T')[0]  ← auto hoje
+  → INSERT tasks
+  → confirmação com 📅 prazo + "(hoje)" se auto-preenchido
+```
+
+### 5.3 Listagem de tarefas com filtros via bot
+```
+listarTarefas(ctx, entities)
+  → status_filtro? → eq('status', ...) else in(['open','in_progress'])
+  → entities.responsavel?
+    → 'eu'/'mim' → eq('assignee_id', ctx.memberId)
+    → nome → SELECT id FROM members WHERE ILIKE '%nome%'
+             → in('assignee_id', ids)
+  → LIMIT 10, ORDER BY due_date ASC
+```
+
+### 5.4 Convite de membro
 ```
 Admin → /members → InviteModal → inviteMember() server action
   → Verifica limite de membros do plano → se excedido: retorna { limitReached }
@@ -271,7 +327,7 @@ Admin → /members → InviteModal → inviteMember() server action
   → Convidado acessa web → auth/callback → vincula user_id por email
 ```
 
-### 5.3 Pagamento Celcoin → Ativação de workspace
+### 5.5 Pagamento Celcoin → Ativação de workspace
 ```
 Cliente compra plano na landing page Celcoin
   → Celcoin: POST https://app.tarefa.app/api/webhooks/celcoin
@@ -286,7 +342,7 @@ Cliente compra plano na landing page Celcoin
   → Retorna { received: true }
 ```
 
-### 5.4 Suspensão de workspace
+### 5.6 Suspensão de workspace
 ```
 Celcoin: subscription.status = 'canceled' | 'closed'
   → webhook: UPDATE workspaces SET status='suspended'
@@ -295,7 +351,7 @@ Celcoin: subscription.status = 'canceled' | 'closed'
   → DashboardShell: renderiza SuspendedOverlay (tela cheia, não contornável)
 ```
 
-### 5.5 Auth callback (auto-link convidado)
+### 5.7 Auth callback (auto-link convidado)
 ```
 Google/email OAuth → /auth/callback?code=XXX
   → exchangeCodeForSession → user.email
@@ -309,7 +365,7 @@ Google/email OAuth → /auth/callback?code=XXX
 ## 6. Configurações de Ambiente
 
 ### VPS Digital Ocean (198.211.112.153)
-- OS: Ubuntu 22.04, Node.js 20, PM2
+- OS: Ubuntu 24.10, Node.js 20, PM2
 - Processo `evolution-api` (porta 8080) + `tarefaapp-agent` (porta 3001)
 - `/opt/tarefaapp/.env`
 
@@ -321,6 +377,7 @@ EVOLUTION_URL=http://localhost:8080
 EVOLUTION_API_KEY=429683C4C977415CAAFCCE10F7D57E11
 EVOLUTION_INSTANCE=tarefaapp
 BOT_PHONE=5531989507577
+BOT_JID=5531989507577@s.whatsapp.net
 BOT_LID=50801628172409
 CELCOIN_CHECKOUT_SMALL / MEDIUM / LARGE  (URLs de checkout)
 ```
@@ -349,6 +406,10 @@ CELCOIN_WEBHOOK_SECRET=a9e9a42c48cb6e9ac0a2590b7a1fd126
 - FROM: `TarefaApp <contato@melhoragencia.ai>`
 - Usos: convite de membro + relatório PDF + email de boas-vindas
 
+### SSH VPS
+- Chave em `~/.ssh/vps_temp`
+- `ssh -i ~/.ssh/vps_temp -o StrictHostKeyChecking=no root@198.211.112.153`
+
 ---
 
 ## 7. Decisões Técnicas
@@ -361,8 +422,15 @@ CELCOIN_WEBHOOK_SECRET=a9e9a42c48cb6e9ac0a2590b7a1fd126
 | Hourly cron dispatcher | Permite horários configuráveis por workspace sem N crons fixos |
 | `reminded_at` no tasks | Evita lembretes duplicados em janelas de 30min |
 | `due_date` split + T12:00:00 | Evita erro de fuso UTC que mostrava dia anterior |
+| `due_date` auto-hoje no bot | UX: criar tarefa sem data → prazo = hoje, evita `null` no banco |
+| `responsavel` no parser p/ listar | Mesmo campo usado para criar e filtrar; parser ciente do contexto |
+| Async IIFE para message_logs | `.catch()` não existe no Supabase JS v2; IIFE garante fire-and-forget sem quebrar o fluxo |
 | `proxy.ts` como middleware (Next.js 16) | Next.js 16 aceita `proxy.ts` como alias de `middleware.ts`; `/api/webhooks/` excluído da proteção de auth |
 | Token webhook no body (não header) | Celcoin cel_payments envia `body.token` — não usa headers customizados |
 | Boas-vindas apenas para novos clientes | Evita spam em renovações; detectado por ausência de workspace com celcoin_id |
 | Sem trial gratuito | R$37 é barreira baixa; trial cria complexidade e ghost signups |
 | Paginação frontend (não server) | Todos os dados já carregados, filtros reativos sem round-trips |
+| `api.whatsapp.com/send` ao invés de `wa.me` | `wa.me?text=` não pré-preenche quando clicado de dentro do WhatsApp; `api.whatsapp.com/send` é consistente em todos os clientes |
+| Logo PDF via primitivas gráficas | jsPDF Helvetica não suporta Unicode/emojis; primitivas (quadrado + círculo) são confiáveis |
+| `pdfSafe()` no PDF | Remove surrogates/emojis de títulos para evitar texto garbled no PDF |
+| `message_logs` separada de `tasks` | Mede engajamento WhatsApp independente de criação de tarefas |
