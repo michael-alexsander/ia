@@ -209,7 +209,7 @@ async function enviarBoasVindasNovoCliente({
       `*Próximo passo:* acesse o link abaixo e crie sua conta usando o email que você usou no cadastro:\n` +
       `👉 https://app.tarefa.app\n\n` +
       `Depois disso, você poderá convidar sua equipe e já começar a criar tarefas por aqui mesmo, pelo WhatsApp! 🚀\n\n` +
-      `💬 Crie tarefas diretamente no WhatsApp, é simples: https://wa.me/5531989507577?text=Quero%20criar%20tarefa%2C%20como%20funciona%3F\n\n` +
+      `💬 Crie tarefas diretamente no WhatsApp, é simples: https://api.whatsapp.com/send?phone=5531989507577&text=Quero%20criar%20tarefa%2C%20como%20funciona%3F\n\n` +
       `Qualquer dúvida é só responder esta mensagem.`
 
     try {

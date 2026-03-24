@@ -94,7 +94,7 @@ export async function sendWelcomeEmail({
           <tr>
             <td style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:16px 40px;text-align:center;">
               <p style="margin:0;font-size:12px;color:#9ca3af;">
-                Dúvidas? Responda este e-mail ou fale pelo WhatsApp: <a href="https://wa.me/${botPhone}?text=Quero%20criar%20tarefa%2C%20como%20funciona%3F" style="color:#128c7e;text-decoration:none;">+55 31 9895-0757</a><br/>
+                Dúvidas? Responda este e-mail ou fale pelo WhatsApp: <a href="https://api.whatsapp.com/send?phone=${botPhone}&text=Quero%20criar%20tarefa%2C%20como%20funciona%3F" style="color:#128c7e;text-decoration:none;">+55 31 9895-0757</a><br/>
                 © ${new Date().getFullYear()} TarefaApp · <a href="${appUrl}" style="color:#128c7e;text-decoration:none;">app.tarefa.app</a>
               </p>
             </td>

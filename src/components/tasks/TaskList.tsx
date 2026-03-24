@@ -185,7 +185,7 @@ async function generateAndDownloadPDF(tasks: Task[], filterParts: string[]): Pro
   doc.setTextColor(18, 140, 126)
   doc.textWithLink('Visao completa em app.tarefa.app', 14, linkStartY, { url: 'https://app.tarefa.app' })
   doc.setTextColor(37, 194, 104)
-  doc.textWithLink('Crie tarefas diretamente no WhatsApp, e simples', 14, linkStartY + 6, { url: 'https://wa.me/5531989507577?text=Quero%20criar%20tarefa%2C%20como%20funciona%3F' })
+  doc.textWithLink('Crie tarefas diretamente no WhatsApp, e simples', 14, linkStartY + 6, { url: 'https://api.whatsapp.com/send?phone=5531989507577&text=Quero%20criar%20tarefa%2C%20como%20funciona%3F' })
 
   const pageCount = (doc as any).internal.getNumberOfPages()
   for (let i = 1; i <= pageCount; i++) {

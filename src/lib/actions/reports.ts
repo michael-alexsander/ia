@@ -63,7 +63,7 @@ export async function sendReport(params: {
             mimetype:  'application/pdf',
             media:     pdfBase64,
             fileName:  filename,
-            caption:   '📊 Relatório de Tarefas\n\n👉 Visão completa: https://app.tarefa.app\n💬 Crie tarefas direto no WhatsApp: https://wa.me/5531989507577?text=Quero%20criar%20tarefa%2C%20como%20funciona%3F',
+            caption:   '📊 Relatório de Tarefas\n\n👉 Visão completa: https://app.tarefa.app\n💬 Crie tarefas direto no WhatsApp: https://api.whatsapp.com/send?phone=5531989507577&text=Quero%20criar%20tarefa%2C%20como%20funciona%3F',
           }),
         })
         if (res.ok) {
@@ -86,7 +86,7 @@ export async function sendReport(params: {
           from:    FROM,
           to:      member.email,
           subject: `📊 Relatório de Tarefas — ${new Date().toLocaleDateString('pt-BR')}`,
-          html:    `<p>Olá, ${member.name}!</p><p>Segue em anexo o relatório de tarefas.</p><p style="margin-top:16px;font-size:13px;color:#6b7280;">👉 <a href="https://app.tarefa.app" style="color:#128c7e;">Visão completa em app.tarefa.app</a><br/>💬 <a href="https://wa.me/5531989507577?text=Quero%20criar%20tarefa%2C%20como%20funciona%3F" style="color:#128c7e;">Crie tarefas diretamente no WhatsApp, é simples</a></p>`,
+          html:    `<p>Olá, ${member.name}!</p><p>Segue em anexo o relatório de tarefas.</p><p style="margin-top:16px;font-size:13px;color:#6b7280;">👉 <a href="https://app.tarefa.app" style="color:#128c7e;">Visão completa em app.tarefa.app</a><br/>💬 <a href="https://api.whatsapp.com/send?phone=5531989507577&text=Quero%20criar%20tarefa%2C%20como%20funciona%3F" style="color:#128c7e;">Crie tarefas diretamente no WhatsApp, é simples</a></p>`,
           attachments: [{ filename, content: Buffer.from(pdfBase64, 'base64') }],
         })
         if (resendError) {
