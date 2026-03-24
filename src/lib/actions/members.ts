@@ -113,7 +113,8 @@ async function sendWhatsAppInvite(phone: string, name: string, code: string): Pr
     `Você foi convidado para o *TarefaApp*.\n\n` +
     `Para ativar seu usuário, basta responder aqui nessa conversa me enviando esse código abaixo 👇\n\n` +
     `*${code}*\n\n` +
-    `Basta digitar o código e enviar aqui mesmo na conversa, só isso!`
+    `Basta digitar o código e enviar aqui mesmo na conversa, só isso!\n\n` +
+    `👉 Visão completa em https://app.tarefa.app`
 
   await fetch(`${url}/message/sendText/${instance}`, {
     method:  'POST',

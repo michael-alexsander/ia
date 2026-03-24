@@ -2,9 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CheckSquare, Users, FolderOpen, Settings, LogOut, ChevronLeft, ChevronRight, X } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { CheckSquare, Users, FolderOpen, Settings, ChevronLeft, ChevronRight, X } from 'lucide-react'
 
 const navItems = [
   { href: '/tasks',    label: 'Tarefas',      icon: CheckSquare },
@@ -22,13 +20,11 @@ type SidebarProps = {
 
 function CheckIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-      <polyline
-        points="20 6 9 17 4 12"
-        stroke="white"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+    <svg width="18" height="18" viewBox="0 0 32 32" fill="none">
+      <circle cx="16" cy="16" r="12" fill="white" />
+      <path
+        d="M15 21l-5-5 1.414-1.414L15 18.172l7.586-7.586L24 12l-9 9z"
+        fill="#128c7e"
       />
     </svg>
   )
@@ -45,7 +41,7 @@ function Logo({ collapsed, isMobile }: { collapsed: boolean; isMobile: boolean }
         <CheckIcon />
       </div>
       {!isCollapsed && (
-        <span className="font-bold text-sm text-white truncate">TarefaApp</span>
+        <span className="font-bold text-sm truncate" style={{ color: 'var(--sidebar-text)' }}>TarefaApp</span>
       )}
     </div>
   )
@@ -53,13 +49,6 @@ function Logo({ collapsed, isMobile }: { collapsed: boolean; isMobile: boolean }
 
 export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onMobileClose }: SidebarProps) {
   const pathname = usePathname()
-  const router = useRouter()
-  const supabase = createClient()
-
-  async function handleLogout() {
-    await supabase.auth.signOut()
-    router.push('/login')
-  }
 
   const sidebarContent = (isMobile = false) => {
     const isCollapsed = collapsed && !isMobile
@@ -74,7 +63,7 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onMobileClose
         {/* Logo + toggle */}
         <div
           className={`shrink-0 flex items-center ${isCollapsed ? 'flex-col gap-2 py-3 px-2' : 'px-3 py-2 h-14'}`}
-          style={{ backgroundColor: '#128c7e' }}
+          style={{ backgroundColor: 'var(--sidebar-bg)', borderBottom: '1px solid var(--sidebar-border)' }}
         >
           {isCollapsed ? (
             <>
@@ -82,7 +71,8 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onMobileClose
               <button
                 onClick={onToggleCollapse}
                 title="Expandir menu"
-                className="text-white/70 hover:text-white transition-colors"
+                className="transition-colors"
+                style={{ color: 'var(--sidebar-text)' }}
               >
                 <ChevronRight size={16} />
               </button>
@@ -91,14 +81,15 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onMobileClose
             <div className="flex items-center justify-between w-full gap-1">
               <Logo collapsed={false} isMobile={isMobile} />
               {isMobile ? (
-                <button onClick={onMobileClose} className="text-white/80 hover:text-white shrink-0 ml-1">
+                <button onClick={onMobileClose} className="shrink-0 ml-1" style={{ color: 'var(--sidebar-text)' }}>
                   <X size={18} />
                 </button>
               ) : (
                 <button
                   onClick={onToggleCollapse}
                   title="Recolher menu"
-                  className="text-white/70 hover:text-white shrink-0 ml-1 transition-colors"
+                  className="shrink-0 ml-1 transition-colors"
+                  style={{ color: 'var(--sidebar-text)' }}
                 >
                   <ChevronLeft size={16} />
                 </button>
@@ -131,17 +122,13 @@ export function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onMobileClose
           })}
         </nav>
 
-        {/* Rodapé: Sair */}
-        <div className="px-2 py-3" style={{ borderTop: '1px solid var(--sidebar-border)' }}>
-          <button
-            onClick={handleLogout}
-            title={isCollapsed ? 'Sair' : undefined}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg w-full text-sm font-medium transition-colors ${isCollapsed ? 'justify-center' : ''}`}
-            style={{ color: 'var(--sidebar-text)' }}
-          >
-            <LogOut size={16} className="shrink-0" />
-            {!isCollapsed && 'Sair'}
-          </button>
+        {/* Rodapé: versão */}
+        <div className="px-4 py-3" style={{ borderTop: '1px solid var(--sidebar-border)' }}>
+          {!isCollapsed && (
+            <span className="text-xs" style={{ color: 'var(--sidebar-text)', opacity: 0.6 }}>
+              TarefaApp v2.1
+            </span>
+          )}
         </div>
       </aside>
     )

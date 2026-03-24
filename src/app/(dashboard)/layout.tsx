@@ -43,6 +43,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
     adminEmail = adminMember?.email ?? null
   }
 
+  const userName  = user.user_metadata?.full_name ?? user.user_metadata?.name ?? user.email ?? undefined
+  const userAvatar = user.user_metadata?.avatar_url as string | undefined
+
   return (
     <DashboardShell
       workspaceName={workspace?.name ?? ''}
@@ -50,6 +53,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
       workspaceStatus={(workspace?.status ?? 'active') as 'active' | 'inactive' | 'suspended'}
       userRole={member.role as 'admin' | 'member'}
       adminEmail={adminEmail}
+      userName={userName}
+      userAvatar={userAvatar}
     >
       {children}
     </DashboardShell>

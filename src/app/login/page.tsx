@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import Image from 'next/image'
 
 type Mode = 'options' | 'email_password' | 'magic_link'
 
@@ -56,9 +55,18 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-[#f5f5f5]">
       <div className="bg-white rounded-xl shadow-lg w-full max-w-sm overflow-hidden">
 
-        {/* Logo — fundo verde idêntico ao da imagem, sem borda visível */}
-        <div className="bg-[#128c7e] flex items-center justify-center px-8 py-6">
-          <Image src="/logo.png" alt="TarefaApp" width={260} height={64} className="h-14 w-auto object-contain" priority />
+        {/* Fake-logo */}
+        <div className="bg-[#128c7e] flex items-center justify-center gap-3 px-8 py-5">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: 'rgba(255,255,255,0.18)' }}>
+            <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
+              <circle cx="16" cy="16" r="12" fill="white" />
+              <path
+                d="M15 21l-5-5 1.414-1.414L15 18.172l7.586-7.586L24 12l-9 9z"
+                fill="#128c7e"
+              />
+            </svg>
+          </div>
+          <span className="text-white font-bold text-2xl tracking-tight">TarefaApp</span>
         </div>
 
         {/* Conteúdo */}

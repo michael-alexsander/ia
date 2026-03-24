@@ -21,10 +21,10 @@ type Group  = {
 
 function MemberAvatar({ m }: { m: Member }) {
   if (m.avatar_url) {
-    return <Image src={m.avatar_url} alt={m.name} width={24} height={24} className="rounded-full object-cover border-2 border-white" style={{ width: 24, height: 24 }} />
+    return <Image src={m.avatar_url} alt={m.name} width={24} height={24} className="rounded-full object-cover border-2" style={{ width: 24, height: 24, borderColor: 'var(--muted)' }} />
   }
   return (
-    <div className="w-6 h-6 rounded-full bg-[#128c7e]/10 border-2 border-white flex items-center justify-center">
+    <div className="w-6 h-6 rounded-full bg-[#128c7e]/10 border-2 flex items-center justify-center" style={{ borderColor: 'var(--muted)' }}>
       <span className="text-[#128c7e] font-semibold text-xs">{m.name.charAt(0).toUpperCase()}</span>
     </div>
   )
@@ -60,7 +60,7 @@ export function GroupList({ initialGroups, allMembers }: { initialGroups: Group[
       {/* Header */}
       <div className="bg-white rounded-xl border border-[#e5e7eb] p-4 flex items-center justify-between">
         <span className="text-sm text-[#6b7280]">
-          <strong className="text-black">{initialGroups.length}</strong> grupo{initialGroups.length !== 1 ? 's' : ''}
+          <strong style={{ color: 'var(--foreground)' }}>{initialGroups.length}</strong> grupo{initialGroups.length !== 1 ? 's' : ''}
           {initialGroups.filter(g => g.linked_at).length > 0 && (
             <span className="ml-3 text-green-600">
               <strong>{initialGroups.filter(g => g.linked_at).length}</strong> vinculado{initialGroups.filter(g => g.linked_at).length !== 1 ? 's' : ''} ao WhatsApp

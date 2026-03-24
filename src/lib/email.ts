@@ -30,10 +30,15 @@ export async function sendWelcomeEmail({
       <td align="center">
         <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
 
-          <!-- Header -->
+          <!-- Header fake-logo -->
           <tr>
-            <td style="background:#128c7e;padding:20px 32px;text-align:center;">
-              <img src="${appUrl}/logo.png" alt="TarefaApp" width="180" style="display:block;margin:0 auto;height:auto;" />
+            <td style="background:#128c7e;padding:16px 32px;text-align:center;">
+              <div style="display:inline-flex;align-items:center;gap:10px;">
+                <div style="width:36px;height:36px;border-radius:10px;background:#128c7e;display:inline-flex;align-items:center;justify-content:center;">
+                  <svg width="20" height="20" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="12" fill="white"/><path d="M15 21l-5-5 1.414-1.414L15 18.172l7.586-7.586L24 12l-9 9z" fill="#128c7e"/></svg>
+                </div>
+                <span style="color:white;font-size:22px;font-weight:700;letter-spacing:-0.5px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">TarefaApp</span>
+              </div>
             </td>
           </tr>
 
@@ -89,7 +94,7 @@ export async function sendWelcomeEmail({
           <tr>
             <td style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:16px 40px;text-align:center;">
               <p style="margin:0;font-size:12px;color:#9ca3af;">
-                Dúvidas? Responda este e-mail ou fale pelo WhatsApp: <a href="https://wa.me/${botPhone}" style="color:#128c7e;text-decoration:none;">+55 31 9895-0757</a><br/>
+                Dúvidas? Responda este e-mail ou fale pelo WhatsApp: <a href="https://wa.me/${botPhone}?text=Quero%20criar%20tarefa%2C%20como%20funciona%3F" style="color:#128c7e;text-decoration:none;">+55 31 9895-0757</a><br/>
                 © ${new Date().getFullYear()} TarefaApp · <a href="${appUrl}" style="color:#128c7e;text-decoration:none;">app.tarefa.app</a>
               </p>
             </td>
@@ -135,10 +140,15 @@ export async function sendInviteEmail({
       <td align="center">
         <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);">
 
-          <!-- Header -->
+          <!-- Header fake-logo -->
           <tr>
-            <td style="background:#128c7e;padding:20px 32px;text-align:center;">
-              <img src="https://app.tarefa.app/logo.png" alt="TarefaApp" width="180" style="display:block;margin:0 auto;height:auto;" />
+            <td style="background:#128c7e;padding:16px 32px;text-align:center;">
+              <div style="display:inline-flex;align-items:center;gap:10px;">
+                <div style="width:36px;height:36px;border-radius:10px;background:#128c7e;display:inline-flex;align-items:center;justify-content:center;">
+                  <svg width="20" height="20" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="12" fill="white"/><path d="M15 21l-5-5 1.414-1.414L15 18.172l7.586-7.586L24 12l-9 9z" fill="#128c7e"/></svg>
+                </div>
+                <span style="color:white;font-size:22px;font-weight:700;letter-spacing:-0.5px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">TarefaApp</span>
+              </div>
             </td>
           </tr>
 

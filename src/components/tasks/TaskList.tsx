@@ -102,55 +102,47 @@ function buildFilterParts(
   return parts
 }
 
-interface ImageInfo { dataUrl: string; w: number; h: number }
 
-async function loadImageBase64(url: string): Promise<ImageInfo> {
-  return new Promise((resolve, reject) => {
-    const img = new window.Image()
-    img.crossOrigin = 'anonymous'
-    img.onload = () => {
-      const canvas = document.createElement('canvas')
-      canvas.width  = img.naturalWidth
-      canvas.height = img.naturalHeight
-      canvas.getContext('2d')!.drawImage(img, 0, 0)
-      resolve({ dataUrl: canvas.toDataURL('image/png'), w: img.naturalWidth, h: img.naturalHeight })
-    }
-    img.onerror = reject
-    img.src = url
-  })
+// Remove emoji e caracteres fora do range Latin que jsPDF nao renderiza
+function pdfSafe(text: string): string {
+  return text
+    .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '') // surrogate pairs (emoji)
+    .replace(/[\u2600-\u27BF]/g, '')                  // misc symbols
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')           // emoji block (U+1F000+)
+    .trim()
 }
 
 async function generateAndDownloadPDF(tasks: Task[], filterParts: string[]): Promise<{ filename: string; base64: string }> {
   const doc = new jsPDF()
 
-  // Tenta carregar o logo; em caso de erro usa apenas texto
-  let logoInfo: ImageInfo | null = null
-  try { logoInfo = await loadImageBase64('/logo.png') } catch { /* sem logo */ }
-
   // Header band
-  const headerH = 30
+  const headerH = 28
   doc.setFillColor(18, 140, 126)
   doc.rect(0, 0, 210, headerH, 'F')
 
-  // Esquerda: título + data
-  doc.setTextColor(255, 255, 255)
+  // Fake-logo direita: quadrado verde mais claro + circulo branco + "TarefaApp"
+  const iconX = 155
+  const iconY = 8
+  doc.setFillColor(23, 165, 148)              // verde levemente mais claro que o fundo
+  doc.roundedRect(iconX, iconY, 12, 12, 2, 2, 'F')
+  doc.setFillColor(255, 255, 255)
+  doc.circle(iconX + 6, iconY + 6, 4, 'F')   // circulo branco interno
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(14)
-  doc.text('Relatório de Tarefas', 14, 12)
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(8)
-  doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, 14, 22)
+  doc.setTextColor(255, 255, 255)
+  doc.text('TarefaApp', 196, 16, { align: 'right' })
 
-  // Direita: logo sem distorção, alinhada à direita
-  if (logoInfo) {
-    const maxW = 54, maxH = 20
-    const aspect = logoInfo.w / logoInfo.h
-    let lw = maxW, lh = lw / aspect
-    if (lh > maxH) { lh = maxH; lw = lh * aspect }
-    const lx = 196 - lw
-    const ly = (headerH - lh) / 2
-    doc.addImage(logoInfo.dataUrl, 'PNG', lx, ly, lw, lh)
-  }
+  // Esquerda: título na mesma linha da logo (y=16)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(14)
+  doc.setTextColor(255, 255, 255)
+  doc.text('Relatorio de Tarefas', 14, 16)
+
+  // Subtítulo "Gerado em" logo abaixo, próximo ao título
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(7.5)
+  doc.setTextColor(200, 240, 235)
+  doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, 14, 23)
 
   let startY = headerH + 6
 
@@ -168,9 +160,9 @@ async function generateAndDownloadPDF(tasks: Task[], filterParts: string[]): Pro
     head: [['ID', 'Título', 'Responsável', 'Grupo', 'Prazo', 'Status']],
     body: tasks.map(t => [
       t.task_id,
-      t.title,
+      pdfSafe(t.title),
       t.assignee?.name ?? '—',
-      t.group?.name ?? '—',
+      t.group ? pdfSafe(t.group.name) : '—',
       t.due_date ? new Date(t.due_date.split('T')[0] + 'T12:00:00').toLocaleDateString('pt-BR') : '—',
       STATUS_LABEL[t.status],
     ]),
@@ -184,13 +176,24 @@ async function generateAndDownloadPDF(tasks: Task[], filterParts: string[]): Pro
     },
   })
 
+  // Links no final da última página
+  const lastPageY = (doc as any).lastAutoTable?.finalY ?? 180
+  const pageH = doc.internal.pageSize.height
+  const linkStartY = Math.min(lastPageY + 10, pageH - 24)
+
+  doc.setFontSize(8)
+  doc.setTextColor(18, 140, 126)
+  doc.textWithLink('Visao completa em app.tarefa.app', 14, linkStartY, { url: 'https://app.tarefa.app' })
+  doc.setTextColor(37, 194, 104)
+  doc.textWithLink('Crie tarefas diretamente no WhatsApp, e simples', 14, linkStartY + 6, { url: 'https://wa.me/5531989507577?text=Quero%20criar%20tarefa%2C%20como%20funciona%3F' })
+
   const pageCount = (doc as any).internal.getNumberOfPages()
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i)
     doc.setFontSize(7.5)
     doc.setTextColor(156, 163, 175)
     doc.text(
-      `${tasks.length} tarefa${tasks.length !== 1 ? 's' : ''}  ·  Página ${i} de ${pageCount}`,
+      `${tasks.length} tarefa${tasks.length !== 1 ? 's' : ''}  ·  Pagina ${i} de ${pageCount}`,
       14,
       doc.internal.pageSize.height - 8
     )

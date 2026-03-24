@@ -70,7 +70,7 @@ export function MemberList({ initialMembers }: { initialMembers: Member[] }) {
       {/* Header */}
       <div className="bg-white rounded-xl border border-[#e5e7eb] p-4 flex items-center justify-between">
         <div className="flex items-center gap-4 text-sm text-[#6b7280]">
-          <span><strong className="text-black">{active.length}</strong> ativo{active.length !== 1 ? 's' : ''}</span>
+          <span><strong style={{ color: 'var(--foreground)' }}>{active.length}</strong> ativo{active.length !== 1 ? 's' : ''}</span>
           {invited.length > 0 && (
             <span><strong className="text-yellow-600">{invited.length}</strong> aguardando</span>
           )}
